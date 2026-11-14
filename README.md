@@ -22,6 +22,28 @@ The Neon CLI configuration, environment, dependencies, and build output are all 
 
 The project is linked to Neon branch `production`. `Back-end/.env.local` is private and ignored by Git. Never copy database credentials into frontend files or share them in chat.
 
+## Deploy the complete app to Vercel
+
+The root `vercel.json` builds the static site and deploys the Express API as a
+Vercel Node.js Function. In Vercel, import the `ASaber33/TravelX` repository,
+keep the Root Directory as `./`, and use the Other framework preset. The
+configuration file supplies the build settings; do not override them in the
+Vercel dashboard.
+
+Add these environment variables in Vercel for Production and Preview, using
+the values from the intended Neon branch:
+
+- `DATABASE_URL`
+- `NEON_AUTH_BASE_URL`
+- `NEON_AUTH_JWKS_URL`
+
+Copy the values from `Back-end/.env.local` locally, or retrieve them with
+`neon env pull` from the `Back-end/` directory. Do not upload `.env` files.
+The database schema and seed data must already be applied to that Neon branch.
+After the first deployment, add the Vercel production domain (and any Preview
+domain used for sign-in) to Neon Auth's trusted domains. Then redeploy after
+adding or changing environment variables.
+
 ## Database and authentication
 
 The Node.js API reads the Neon connection from `Back-end/.env.local` and serves the catalog endpoints:

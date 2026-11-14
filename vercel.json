@@ -1,0 +1,6 @@
+{
+  "version": 2,
+  "installCommand": "npm --prefix Back-end ci",
+  "buildCommand": "npm --prefix Back-end run build",
+  "outputDirectory": "Back-end/dist"
+}

@@ -29,9 +29,11 @@ export function createApp(database, configuredOrigins = process.env.FRONTEND_ORI
   app.disable("x-powered-by");
   app.use((request, response, next) => {
     const origin = request.get("origin");
+    const forwardedProtocol = request.get("x-forwarded-proto")?.split(",")[0].trim();
+    const requestOrigin = `${forwardedProtocol || request.protocol}://${request.get("host")}`;
     const localDevelopmentOrigin = /^http:\/\/(?:localhost|127\.0\.0\.1):(?:300[1-9]|3010)$/.test(origin || "");
 
-    if (origin && (allowedOrigins.has(origin) || localDevelopmentOrigin)) {
+    if (origin && (origin === requestOrigin || allowedOrigins.has(origin) || localDevelopmentOrigin)) {
       response.set("Access-Control-Allow-Origin", origin);
       response.set("Vary", "Origin");
       response.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");

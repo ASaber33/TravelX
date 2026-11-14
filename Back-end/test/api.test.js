@@ -52,6 +52,16 @@ test("health reports when the catalog schema is missing", async () => {
   await server.close();
 });
 
+test("same-origin API requests are allowed through the production proxy", async () => {
+  const server = await startServer({ query: async () => ({ rows: [] }) });
+  const response = await fetch(`${server.baseUrl}/api/config`, {
+    headers: { Origin: server.baseUrl }
+  });
+
+  assert.equal(response.headers.get("access-control-allow-origin"), server.baseUrl);
+  await server.close();
+});
+
 test("auth config exposes only the public Neon Auth base URL", async () => {
   const previousBaseUrl = process.env.NEON_AUTH_BASE_URL;
   process.env.NEON_AUTH_BASE_URL = "https://auth.example.test/neondb/auth";
