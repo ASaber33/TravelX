@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "installCommand": "npm --prefix Back-end ci",
+  "installCommand": "npm --prefix Back-end ci --no-audit --no-fund --verbose",
   "buildCommand": "npm --prefix Back-end run build",
   "outputDirectory": "Back-end/dist"
 }
