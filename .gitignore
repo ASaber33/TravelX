@@ -1,0 +1,12 @@
+# Local secrets and Neon CLI state
+Back-end/.env
+Back-end/.env.local
+Back-end/.neon
+
+# Dependencies and generated build output
+Back-end/node_modules/
+Back-end/dist/
+.vercel/
+
+# Local logs
+npm-debug.log*

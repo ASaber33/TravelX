@@ -1,0 +1,6 @@
+.env
+.env.local
+.neon
+dist/
+node_modules/
+npm-debug.log*

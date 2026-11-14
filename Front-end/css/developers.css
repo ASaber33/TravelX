@@ -1,0 +1,215 @@
+body {
+    min-height: 100vh;
+    background:
+        radial-gradient(ellipse at 50% 0, rgb(197 165 103 / 10%), transparent 48%),
+        #101a16;
+    color: #f6f3ec;
+}
+
+.developers-header {
+    width: min(1180px, calc(100% - 48px));
+    min-height: 96px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgb(255 255 255 / 12%);
+}
+
+.developers-brand img {
+    display: block;
+    width: 168px;
+    height: 72px;
+    object-fit: contain;
+}
+
+.developers-home-link {
+    color: #d7c08f;
+    font-size: .85rem;
+}
+
+.developers-home-link span {
+    margin-left: 6px;
+}
+
+.developers-main {
+    width: min(1180px, calc(100% - 48px));
+    margin: 0 auto;
+    padding: clamp(72px, 10vw, 128px) 0 100px;
+}
+
+.developers-intro {
+    max-width: 700px;
+    margin: 0 auto 54px;
+    text-align: center;
+}
+
+.developers-intro .eyebrow {
+    color: #d7c08f;
+    font-size: .7rem;
+    letter-spacing: .2em;
+}
+
+.developers-intro h1 {
+    margin: 18px 0 14px;
+    font-family: var(--font-display, Georgia, serif);
+    font-size: clamp(2.6rem, 6vw, 5rem);
+    font-weight: 400;
+    line-height: 1.05;
+}
+
+.developers-intro h1 em {
+    color: #d7c08f;
+    font-weight: 400;
+}
+
+.developers-intro p {
+    color: #b5beb7;
+    font-size: 1rem;
+}
+
+.developer-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(18px, 3vw, 38px);
+}
+
+.developer-card {
+    min-width: 0;
+    text-align: center;
+}
+
+.developer-card img {
+    display: block;
+    width: min(100%, 300px);
+    aspect-ratio: 1;
+    margin: 0 auto;
+    object-fit: cover;
+    object-position: center 35%;
+    border: 1px solid rgb(215 192 143 / 55%);
+    border-radius: 50%;
+    box-shadow: 0 24px 70px rgb(0 0 0 / 28%);
+    background: #1b2924;
+    animation: developer-float 5s ease-in-out infinite;
+}
+
+.developer-card:nth-child(2) img {
+    animation-delay: -1.7s;
+}
+
+.developer-card:nth-child(3) img {
+    animation-delay: -3.4s;
+}
+
+.developer-card h2 {
+    margin: 20px 0 0;
+    color: #f6f3ec;
+    font-family: var(--font-display, Georgia, serif);
+    font-size: clamp(1.25rem, 2.4vw, 1.8rem);
+    font-weight: 400;
+}
+
+.developer-socials {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.developer-social-placeholder {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    color: #d7c08f;
+    border: 1px solid rgb(215 192 143 / 35%);
+    border-radius: 50%;
+    opacity: .8;
+}
+
+.developer-social-placeholder svg {
+    width: 17px;
+    height: 17px;
+    fill: currentColor;
+}
+
+@media (min-width: 641px) and (max-height: 1000px) {
+    .developers-main {
+        padding: 28px 0 32px;
+    }
+
+    .developers-intro {
+        margin-bottom: 28px;
+    }
+
+    .developers-intro h1 {
+        margin: 12px 0 8px;
+        font-size: clamp(2.4rem, 5vw, 4rem);
+    }
+
+    .developer-card img {
+        width: min(100%, 250px);
+    }
+
+    .developer-card h2 {
+        margin-top: 12px;
+    }
+
+    .developer-socials {
+        margin-top: 10px;
+    }
+}
+
+@media (max-width: 640px) {
+    .developers-header,
+    .developers-main {
+        width: min(100% - 36px, 440px);
+    }
+
+    .developers-header {
+        min-height: 78px;
+    }
+
+    .developers-brand img {
+        width: 132px;
+        height: 60px;
+    }
+
+    .developers-main {
+        padding: 68px 0;
+    }
+
+    .developers-intro {
+        margin-bottom: 36px;
+    }
+
+    .developer-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 34px;
+    }
+
+    .developer-card:nth-child(2) {
+        order: -1;
+    }
+
+    .developer-card img {
+        width: min(82vw, 300px);
+    }
+}
+
+@keyframes developer-float {
+    0%,
+    100% {
+        transform: translate(0, 0);
+    }
+
+    50% {
+        transform: translate(0, -30px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .developer-card img {
+        animation: none;
+    }
+}
