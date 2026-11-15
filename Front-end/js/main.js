@@ -427,35 +427,27 @@ function journeysPage() {
                 <section class="journey-globe-panel">
                     <div class="journey-globe-layout">
                         <div class="journey-globe-wrap">
-                            <div id="journey-globe-map" aria-label="Rotating 3D Earth showing visited and upcoming destinations connected in travel-date order">
-                                <div class="earth-controls" aria-label="Earth controls">
-                                    <button type="button" data-earth-zoom-in aria-label="Zoom in" title="Zoom in">+</button>
-                                    <button type="button" data-earth-zoom-out aria-label="Zoom out" title="Zoom out">−</button>
-                                    <button type="button" data-earth-reset aria-label="Orient Earth north-up" title="Orient Earth north-up">↺</button>
-                                </div>
-                                <div id="earth-place-info" class="earth-place-info" role="status" hidden><strong></strong><span></span></div>
-                                <div class="earth-attribution">Satellite imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community</div>
-                            </div>
+                            <div id="journey-globe-map" aria-label="Interactive globe map with visited and upcoming trip markers" role="application"></div>
                         </div>
                         <aside class="globe-side-legend">
                             <span class="eyebrow">YOUR TRAVEL GLOBE</span>
-                            <h2>Your journey, connected.</h2>
+                            <h2>Your places.</h2>
                             <div class="globe-legend">
                                 <span><i class="visited-dot"></i>Visited <b id="visited-count">0</b></span>
                                 <span><i class="upcoming-dot"></i>Upcoming <b id="upcoming-count">0</b></span>
                             </div>
-                            <p class="globe-empty-note" role="status" hidden>Your booked destinations will appear here in travel-date order.</p>
+                            <p class="globe-empty-note" role="status" hidden>Your booked destinations will appear here.</p>
                             <div class="globe-route-groups">
                                 <section class="globe-route-group">
-                                    <h3><span><i class="visited-dot"></i>Visited route</span><b id="visited-leg-count">0 legs</b></h3>
+                                    <h3><span><i class="visited-dot"></i>Visited</span></h3>
                                     <ol id="visited-route-list" aria-label="Visited destinations in travel-date order"></ol>
                                 </section>
                                 <section class="globe-route-group">
-                                    <h3><span><i class="upcoming-dot"></i>Upcoming route</span><b id="upcoming-leg-count">0 legs</b></h3>
+                                    <h3><span><i class="upcoming-dot"></i>Upcoming</span></h3>
                                     <ol id="upcoming-route-list" aria-label="Upcoming destinations in travel-date order"></ol>
                                 </section>
                             </div>
-                            <p class="globe-hint">Lines show the order of booked destinations, not verified flight paths.</p>
+                            <p class="globe-hint">Zoom in to reveal city and region names. Select a place to focus the globe there.</p>
                             <button type="button" data-globe-reset class="text-button globe-reset-link">Fit all journeys ↺</button>
                         </aside>
                     </div>

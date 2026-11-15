@@ -73,7 +73,7 @@ Profile photos can be cropped, repositioned, zoomed, and previewed in the round 
 
 ## Pages
 
-Home, Destinations, Destination Details, Search Results, Trip Details, Login, Register, Checkout, Confirmation, Dashboard, My Bookings, Favorites, and Profile & Settings.
+Home, Destinations, Destination Details, Search Results, Trip Details, Login, Register, Checkout, Confirmation, Dashboard, My Bookings, Favorites, Travel Globe, and Profile & Settings.
 
 ## Images and services
 
@@ -85,12 +85,9 @@ The homepage ocean hero uses the same locally stored, muted, looping MP4 in both
 
 Theme choice remains in this browser's LocalStorage. Accounts use Neon Auth; profiles, bookings, favorites, and newsletter signups are stored in Postgres. Checkout only simulates a booking and does not accept card information or process payment. The coupon `TRAVELX10` applies a 10% demo discount; taxes are simulated at 8%.
 
-The travel globe shows a rotating 3D Earth with booked destinations and
-separate great-circle connections for visited and upcoming journeys. Drag to
-rotate it, use the on-globe controls to zoom or orient Earth north-up, and select
-a destination in the side list to bring it to the front. The side control fits
-all journeys in the starting view. Earth continues rotating unless the device
-requests reduced motion. These lines show booking sequence only, not verified
-flight paths. The optional source KML file is stored in
+The travel globe uses MapLibre GL JS with an interactive globe projection and
+vector map labels. Booked destinations are plotted from the Neon destination
+coordinates; select a place in the side list to focus the map on it. City and
+region labels come from the vector map as you zoom in. The optional source KML file is stored in
 `Front-end/assets/maps/Untitled map project.kml`; it contains no place or route
 features and is not used by the globe.

@@ -19,13 +19,6 @@
       throw err = [e], e;
     }
   };
-  var __commonJS = (cb, mod) => function __require2() {
-    try {
-      return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-    } catch (e) {
-      throw mod = 0, e;
-    }
-  };
   var __export = (target, all) => {
     for (var name2 in all)
       __defProp(target, name2, { get: all[name2], enumerable: true });
@@ -75,14 +68,6 @@
         { id: "egypt-discovery", destinationId: "egypt", title: "Nile to Red Sea", duration: 8, price: 1370, dates: "October \u2013 April", type: "Cultural", image: "photo-1548013146-72479768bada", included: ["Cairo and Luxor hotels", "Expert Egyptologist guide", "Domestic transfer", "Red Sea stay"], excluded: ["International flights", "Visa fees"], itinerary: ["Giza plateau", "Luxor temples", "Red Sea reef escape"] },
         { id: "amalfi-coast", destinationId: "amalfi", title: "Amalfi by Sea", duration: 6, price: 2460, dates: "April \u2013 October", type: "Luxury", image: "photo-1516483638261-f4dbaf036963", included: ["Sea-view hotel", "Private boat day", "Breakfast", "Coast transfers"], excluded: ["Flights", "Some meals"], itinerary: ["Arrive in Positano", "Private boat to Capri", "Ravello gardens"] }
       ];
-    }
-  });
-
-  // ../Front-end/data/reviews.js
-  var reviews;
-  var init_reviews = __esm({
-    "../Front-end/data/reviews.js"() {
-      reviews = [{ name: "Amelia R.", place: "The Maldives", text: "Every detail felt considered. We came home rested, inspired, and already planning the next trip.", stars: 5 }, { name: "Daniel K.", place: "Swiss Alps", text: "The rail route and local guide made the mountains feel wonderfully personal.", stars: 5 }, { name: "Sofia M.", place: "Bali", text: "A beautiful balance of quiet, culture and the little moments we will remember most.", stars: 5 }];
     }
   });
 
@@ -28774,531 +28759,6 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     }
   });
 
-  // ../Front-end/js/journey-routes.mjs
-  function getVisitState(booking, today) {
-    const status = String(booking.status || "").trim().toLowerCase();
-    if (status === "cancelled" || status === "canceled") return null;
-    const date5 = String(booking.date || "").slice(0, 10);
-    if (VISITED_STATUSES.has(status) || date5 && date5 < today) return "visited";
-    if (UPCOMING_STATUSES.has(status) || date5 && date5 >= today) return "upcoming";
-    return null;
-  }
-  function coordinatesFor(destination) {
-    const latitude = Number(destination.lat);
-    const longitude = Number(destination.lng);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
-    return [longitude, latitude];
-  }
-  function toVector([longitude, latitude]) {
-    const lambda = longitude * Math.PI / 180;
-    const phi = latitude * Math.PI / 180;
-    return [
-      Math.cos(phi) * Math.cos(lambda),
-      Math.cos(phi) * Math.sin(lambda),
-      Math.sin(phi)
-    ];
-  }
-  function toCoordinates([x, y, z2]) {
-    return [
-      Math.atan2(y, x) * 180 / Math.PI,
-      Math.atan2(z2, Math.hypot(x, y)) * 180 / Math.PI
-    ];
-  }
-  function splitAtDateLine(points) {
-    const lines = [[]];
-    for (const point of points) {
-      const line = lines.at(-1);
-      const previous = line.at(-1);
-      if (!previous) {
-        line.push(point);
-        continue;
-      }
-      const [previousLongitude, previousLatitude] = previous;
-      const [longitude, latitude] = point;
-      const longitudeDelta = longitude - previousLongitude;
-      if (longitudeDelta > 180 || longitudeDelta < -180) {
-        const adjustedLongitude = longitudeDelta > 180 ? longitude - 360 : longitude + 360;
-        const boundaryLongitude = longitudeDelta > 180 ? -180 : 180;
-        const crossingRatio = (boundaryLongitude - previousLongitude) / (adjustedLongitude - previousLongitude);
-        const crossingLatitude = previousLatitude + (latitude - previousLatitude) * crossingRatio;
-        line.push([boundaryLongitude, crossingLatitude]);
-        lines.push([[boundaryLongitude === 180 ? -180 : 180, crossingLatitude], point]);
-      } else {
-        line.push(point);
-      }
-    }
-    return lines.filter((line) => line.length > 1);
-  }
-  function createGreatCircleGeometry(start, end) {
-    const startVector = toVector(start);
-    const endVector = toVector(end);
-    const dot = Math.max(-1, Math.min(
-      1,
-      startVector.reduce((sum, value, index) => sum + value * endVector[index], 0)
-    ));
-    const angle = Math.acos(dot);
-    const steps = Math.max(12, Math.min(96, Math.ceil(angle * 180 / Math.PI / 2)));
-    const coordinates = [];
-    for (let step = 0; step <= steps; step += 1) {
-      const fraction = step / steps;
-      let vector;
-      if (angle < 1e-8) {
-        vector = startVector;
-      } else if (Math.abs(Math.sin(angle)) < 1e-8) {
-        vector = startVector.map((value, index) => value * (1 - fraction) + endVector[index] * fraction);
-      } else {
-        const startWeight = Math.sin((1 - fraction) * angle) / Math.sin(angle);
-        const endWeight = Math.sin(fraction * angle) / Math.sin(angle);
-        vector = startVector.map((value, index) => value * startWeight + endVector[index] * endWeight);
-      }
-      coordinates.push(toCoordinates(vector));
-    }
-    const lines = splitAtDateLine(coordinates);
-    return lines.length > 1 ? { type: "MultiLineString", coordinates: lines } : { type: "LineString", coordinates: lines[0] || coordinates };
-  }
-  function buildJourneyMapData(bookings, destinations2, trips2, today) {
-    const destinationById = new Map(destinations2.map((destination) => [destination.id, destination]));
-    const tripById = new Map(trips2.map((trip) => [trip.id, trip]));
-    const visits = bookings.flatMap((booking, originalIndex) => {
-      const state = getVisitState(booking, today);
-      if (!state) return [];
-      const trip = tripById.get(booking.tripId);
-      const destinationId = booking.destinationId || trip?.destinationId;
-      const destination = destinationById.get(destinationId);
-      const coordinates = destination && coordinatesFor(destination);
-      if (!destination || !coordinates) return [];
-      return [{
-        destination,
-        destinationId,
-        coordinates,
-        date: String(booking.date || "").slice(0, 10),
-        state,
-        originalIndex
-      }];
-    }).sort((left, right) => {
-      if (left.date && right.date) return left.date.localeCompare(right.date) || left.originalIndex - right.originalIndex;
-      if (left.date) return -1;
-      if (right.date) return 1;
-      return left.originalIndex - right.originalIndex;
-    });
-    const visited = visits.filter((visit2) => visit2.state === "visited");
-    const upcoming = visits.filter((visit2) => visit2.state === "upcoming");
-    const markerByDestination = /* @__PURE__ */ new Map();
-    for (const visit2 of visits) {
-      const previous = markerByDestination.get(visit2.destinationId);
-      if (!previous || visit2.state === "upcoming") {
-        markerByDestination.set(visit2.destinationId, visit2);
-      }
-    }
-    const routes = ["visited", "upcoming"].flatMap((state) => {
-      const routeVisits = state === "visited" ? visited : upcoming;
-      return routeVisits.slice(1).flatMap((visit2, index) => {
-        const previous = routeVisits[index];
-        if (previous.destinationId === visit2.destinationId) return [];
-        return [{
-          state,
-          from: previous.destination.name,
-          to: visit2.destination.name,
-          geometry: createGreatCircleGeometry(previous.coordinates, visit2.coordinates)
-        }];
-      });
-    });
-    return {
-      markers: [...markerByDestination.values()],
-      routes,
-      visited,
-      upcoming
-    };
-  }
-  var VISITED_STATUSES, UPCOMING_STATUSES;
-  var init_journey_routes = __esm({
-    "../Front-end/js/journey-routes.mjs"() {
-      VISITED_STATUSES = /* @__PURE__ */ new Set(["completed"]);
-      UPCOMING_STATUSES = /* @__PURE__ */ new Set(["upcoming", "confirmed", "pending"]);
-    }
-  });
-
-  // ../Front-end/js/globe.js?v=earth-3d-20261114-v2
-  function earthPoint([longitude, latitude], radius = EARTH_RADIUS) {
-    const longitudeRadians = THREE.MathUtils.degToRad(longitude);
-    const latitudeRadians = THREE.MathUtils.degToRad(latitude);
-    const latitudeRadius = Math.cos(latitudeRadians) * radius;
-    return new THREE.Vector3(
-      latitudeRadius * Math.cos(longitudeRadians),
-      Math.sin(latitudeRadians) * radius,
-      -latitudeRadius * Math.sin(longitudeRadians)
-    );
-  }
-  function renderJourneyList(list, visits, globe) {
-    if (!list) return;
-    list.replaceChildren();
-    visits.forEach((visit2, index) => {
-      const item = document.createElement("li");
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "globe-route-stop";
-      const number4 = document.createElement("span");
-      number4.className = "globe-route-stop-number";
-      number4.textContent = String(index + 1).padStart(2, "0");
-      const place = document.createElement("span");
-      place.className = "globe-route-stop-place";
-      const name2 = document.createElement("strong");
-      name2.textContent = visit2.destination.name;
-      const country = document.createElement("small");
-      country.textContent = visit2.destination.country;
-      place.append(name2, country);
-      const date5 = document.createElement("time");
-      date5.className = "globe-route-stop-date";
-      if (visit2.date) {
-        date5.dateTime = visit2.date;
-        date5.textContent = (/* @__PURE__ */ new Date(`${visit2.date}T00:00:00`)).toLocaleDateString(void 0, {
-          month: "short",
-          year: "numeric"
-        });
-      } else {
-        date5.textContent = "Date not set";
-      }
-      button.append(number4, place, date5);
-      button.addEventListener("click", () => globe.focusOn(visit2));
-      item.append(button);
-      list.append(item);
-    });
-  }
-  function createLabel(visit2) {
-    const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = 112;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("The browser could not create a destination label.");
-    context.fillStyle = "rgba(7, 18, 24, 0.84)";
-    context.beginPath();
-    context.roundRect(5, 5, 502, 102, 48);
-    context.fill();
-    context.strokeStyle = visit2.state === "visited" ? "#69d4a0" : "#f0bd62";
-    context.lineWidth = 5;
-    context.stroke();
-    context.fillStyle = "#fffaf0";
-    context.font = "600 38px Inter, Arial, sans-serif";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.fillText(visit2.destination.name, 256, 57, 455);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      depthTest: true,
-      depthWrite: false
-    }));
-    sprite.scale.set(0.52, 0.114, 1);
-    return sprite;
-  }
-  function routeLines(routes) {
-    return routes.flatMap((route) => {
-      const coordinateLines = route.geometry.type === "MultiLineString" ? route.geometry.coordinates : [route.geometry.coordinates];
-      const material = route.state === "visited" ? new THREE.LineBasicMaterial({ color: "#69d4a0", transparent: true, opacity: 0.96 }) : new THREE.LineDashedMaterial({
-        color: "#f0bd62",
-        dashSize: 0.035,
-        gapSize: 0.022,
-        transparent: true,
-        opacity: 0.98
-      });
-      return coordinateLines.filter((line) => line.length > 1).map((coordinates) => {
-        const points = coordinates.map((coordinate) => earthPoint(coordinate, 1.009));
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const line = new THREE.Line(geometry, material);
-        if (route.state === "upcoming") line.computeLineDistances();
-        line.renderOrder = 2;
-        line.userData.state = route.state;
-        return line;
-      });
-    });
-  }
-  function destinationMarkers(visits) {
-    const markerMaterial = new THREE.MeshStandardMaterial({
-      color: "#fffaf0",
-      emissive: "#fffaf0",
-      emissiveIntensity: 0.18,
-      roughness: 0.32
-    });
-    const visitedMaterial = new THREE.MeshStandardMaterial({
-      color: "#69d4a0",
-      emissive: "#1e9b69",
-      emissiveIntensity: 0.8,
-      roughness: 0.3
-    });
-    const upcomingMaterial = new THREE.MeshStandardMaterial({
-      color: "#f0bd62",
-      emissive: "#c98222",
-      emissiveIntensity: 0.8,
-      roughness: 0.3
-    });
-    return visits.map((visit2) => {
-      const group = new THREE.Group();
-      const point = earthPoint(visit2.coordinates, MARKER_RADIUS);
-      group.position.copy(point);
-      group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), point.clone().normalize());
-      const halo = new THREE.Mesh(
-        new THREE.SphereGeometry(0.037, 20, 16),
-        new THREE.MeshBasicMaterial({
-          color: visit2.state === "visited" ? "#69d4a0" : "#f0bd62",
-          transparent: true,
-          opacity: 0.3,
-          depthWrite: false
-        })
-      );
-      const marker = new THREE.Mesh(
-        new THREE.SphereGeometry(0.021, 20, 16),
-        visit2.state === "visited" ? visitedMaterial : upcomingMaterial
-      );
-      marker.userData.visit = visit2;
-      marker.userData.isDestinationMarker = true;
-      group.add(halo, marker);
-      const label = createLabel(visit2);
-      label.position.set(0, 0.04, 0.14);
-      group.add(label);
-      return { group, marker, visit: visit2 };
-    });
-  }
-  function buildStars() {
-    const positions = [];
-    for (let index = 0; index < 900; index += 1) {
-      const angle = Math.random() * Math.PI * 2;
-      const height = Math.random() * 2 - 1;
-      const radius = 8 + Math.random() * 16;
-      const horizontalRadius = Math.sqrt(1 - height * height);
-      positions.push(
-        radius * horizontalRadius * Math.cos(angle),
-        radius * height,
-        radius * horizontalRadius * Math.sin(angle)
-      );
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    return new THREE.Points(geometry, new THREE.PointsMaterial({
-      color: "#d9e8ef",
-      size: 0.035,
-      transparent: true,
-      opacity: 0.72,
-      sizeAttenuation: true
-    }));
-  }
-  function globeOrientation(center) {
-    return new THREE.Quaternion().setFromUnitVectors(
-      center.clone().normalize(),
-      new THREE.Vector3(0, 0, 1)
-    );
-  }
-  async function initJourneyGlobe(bookings = read().bookings, loadError = "") {
-    const container = document.querySelector("#journey-globe-map");
-    if (!container) return;
-    const statusNote = document.querySelector(".globe-empty-note");
-    const visitedCount = document.querySelector("#visited-count");
-    const upcomingCount = document.querySelector("#upcoming-count");
-    const visitedLegCount = document.querySelector("#visited-leg-count");
-    const upcomingLegCount = document.querySelector("#upcoming-leg-count");
-    const infoCard = document.querySelector("#earth-place-info");
-    const resetButton = document.querySelector("[data-earth-reset]");
-    let renderer;
-    try {
-      THREE = await import("https://unpkg.com/three@0.180.0/build/three.module.js");
-      const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-      const journeyData = buildJourneyMapData(bookings, destinations, trips, today);
-      const { markers, routes, visited, upcoming } = journeyData;
-      const visits = markers;
-      if (visitedCount) visitedCount.textContent = String(new Set(visited.map((visit2) => visit2.destinationId)).size);
-      if (upcomingCount) upcomingCount.textContent = String(new Set(upcoming.map((visit2) => visit2.destinationId)).size);
-      if (visitedLegCount) visitedLegCount.textContent = `${routes.filter((route) => route.state === "visited").length} legs`;
-      if (upcomingLegCount) upcomingLegCount.textContent = `${routes.filter((route) => route.state === "upcoming").length} legs`;
-      if (statusNote) {
-        statusNote.hidden = !loadError && visits.length > 0;
-        if (loadError) statusNote.textContent = `Could not refresh your bookings: ${loadError}`;
-      }
-      renderer = new THREE.WebGLRenderer({ alpha: false, antialias: true, powerPreference: "high-performance" });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.18;
-      renderer.setClearColor("#030912", 1);
-      renderer.domElement.className = "earth-canvas";
-      renderer.domElement.setAttribute("aria-label", "Interactive 3D satellite globe with your visited and upcoming destinations");
-      renderer.domElement.setAttribute("role", "img");
-      container.querySelector(".earth-canvas")?.remove();
-      container.prepend(renderer.domElement);
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color("#030912");
-      scene.add(buildStars());
-      const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-      camera.position.set(0, 0, 4);
-      camera.lookAt(0, 0, 0);
-      const earthGroup = new THREE.Group();
-      scene.add(earthGroup);
-      const earthGeometry = new THREE.SphereGeometry(EARTH_RADIUS, 96, 64);
-      const texture = await new THREE.TextureLoader().loadAsync(
-        new URL(
-          "assets/images/earth-satellite.jpg",
-          new URL(location.pathname.includes("/Front-end/pages/") ? "../" : "Front-end/", location.href)
-        ).href
-      );
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      const earthMaterial = new THREE.MeshStandardMaterial({
-        map: texture,
-        roughness: 0.95,
-        metalness: 0
-      });
-      const earth = new THREE.Mesh(earthGeometry, earthMaterial);
-      earthGroup.add(earth);
-      scene.add(new THREE.AmbientLight("#a6bbce", 1.1));
-      const sunlight = new THREE.DirectionalLight("#fff0d6", 2.1);
-      sunlight.position.set(-4, 2.5, 5);
-      scene.add(sunlight);
-      const routeObjects = routeLines(routes);
-      earthGroup.add(...routeObjects);
-      const markerObjects = destinationMarkers(visits);
-      earthGroup.add(...markerObjects.map(({ group }) => group));
-      if (visits.length) {
-        const center = visits.reduce(
-          (sum, visit2) => sum.add(earthPoint(visit2.coordinates).normalize()),
-          new THREE.Vector3()
-        ).normalize();
-        earthGroup.quaternion.copy(globeOrientation(center));
-      }
-      const initialOrientation = earthGroup.quaternion.clone();
-      const updateInfo = (visit2) => {
-        if (!infoCard) return;
-        const title = infoCard.querySelector("strong");
-        const detail = infoCard.querySelector("span");
-        if (title) title.textContent = visit2.destination.name;
-        if (detail) {
-          const date5 = visit2.date ? (/* @__PURE__ */ new Date(`${visit2.date}T00:00:00`)).toLocaleDateString(void 0, { month: "short", year: "numeric" }) : "Date not set";
-          detail.textContent = `${visit2.destination.country} \xB7 ${visit2.state === "visited" ? "Visited" : "Upcoming"} \xB7 ${date5}`;
-        }
-        infoCard.hidden = false;
-      };
-      const focusOn = (visit2) => {
-        earthGroup.quaternion.copy(globeOrientation(earthPoint(visit2.coordinates)));
-        updateInfo(visit2);
-      };
-      if (visits[0]) updateInfo(visits[0]);
-      renderJourneyList(document.querySelector("#visited-route-list"), visited, { focusOn });
-      renderJourneyList(document.querySelector("#upcoming-route-list"), upcoming, { focusOn });
-      let cameraDistance = camera.position.z;
-      const fitAllJourneys = () => {
-        earthGroup.quaternion.copy(initialOrientation);
-        cameraDistance = 4;
-        camera.position.z = cameraDistance;
-        if (visits[0]) updateInfo(visits[0]);
-      };
-      const orientNorthUp = () => {
-        earthGroup.quaternion.identity();
-        cameraDistance = 4;
-        camera.position.z = cameraDistance;
-      };
-      resetButton?.addEventListener("click", orientNorthUp);
-      document.querySelector("[data-earth-zoom-in]")?.addEventListener("click", () => {
-        cameraDistance = Math.max(1.9, cameraDistance - 0.35);
-        camera.position.z = cameraDistance;
-      });
-      document.querySelector("[data-earth-zoom-out]")?.addEventListener("click", () => {
-        cameraDistance = Math.min(5.5, cameraDistance + 0.35);
-        camera.position.z = cameraDistance;
-      });
-      document.querySelectorAll("[data-globe-reset]").forEach((button) => button.addEventListener("click", fitAllJourneys));
-      const resize = () => {
-        const { width, height } = container.getBoundingClientRect();
-        if (!width || !height) return;
-        camera.aspect = width / height;
-        camera.updateProjectionMatrix();
-        renderer.setSize(width, height, false);
-      };
-      const resizeObserver = new ResizeObserver(resize);
-      resizeObserver.observe(container);
-      resize();
-      const raycaster = new THREE.Raycaster();
-      const pointer = new THREE.Vector2();
-      let dragStart = null;
-      let hasDragged = false;
-      renderer.domElement.addEventListener("pointerdown", (event) => {
-        dragStart = { x: event.clientX, y: event.clientY, orientation: earthGroup.quaternion.clone() };
-        hasDragged = false;
-        renderer.domElement.setPointerCapture(event.pointerId);
-      });
-      renderer.domElement.addEventListener("pointermove", (event) => {
-        if (!dragStart) return;
-        const deltaX = event.clientX - dragStart.x;
-        const deltaY = event.clientY - dragStart.y;
-        if (Math.abs(deltaX) + Math.abs(deltaY) > 4) hasDragged = true;
-        if (!hasDragged) return;
-        const dragRotation = new THREE.Quaternion().setFromEuler(
-          new THREE.Euler(deltaY * 6e-3, deltaX * 6e-3, 0, "YXZ")
-        );
-        earthGroup.quaternion.copy(dragRotation.multiply(dragStart.orientation));
-      });
-      renderer.domElement.addEventListener("pointerup", (event) => {
-        if (dragStart && !hasDragged) {
-          const bounds = renderer.domElement.getBoundingClientRect();
-          pointer.set(
-            (event.clientX - bounds.left) / bounds.width * 2 - 1,
-            -((event.clientY - bounds.top) / bounds.height) * 2 + 1
-          );
-          scene.updateMatrixWorld(true);
-          raycaster.setFromCamera(pointer, camera);
-          const hit = raycaster.intersectObjects(markerObjects.map(({ marker }) => marker), false)[0];
-          const earthHit = raycaster.intersectObject(earth, false)[0];
-          if (hit && (!earthHit || hit.distance < earthHit.distance)) {
-            focusOn(hit.object.userData.visit);
-          }
-        }
-        dragStart = null;
-      });
-      renderer.domElement.addEventListener("pointercancel", () => {
-        dragStart = null;
-      });
-      renderer.domElement.addEventListener("wheel", (event) => {
-        event.preventDefault();
-        cameraDistance = THREE.MathUtils.clamp(cameraDistance + Math.sign(event.deltaY) * 0.2, 1.9, 5.5);
-        camera.position.z = cameraDistance;
-      }, { passive: false });
-      let previousTime = 0;
-      const animate = (time3) => {
-        if (!renderer.domElement.isConnected) {
-          resizeObserver.disconnect();
-          texture.dispose();
-          earthGeometry.dispose();
-          earthMaterial.dispose();
-          renderer.dispose();
-          return;
-        }
-        const delta = previousTime ? Math.min((time3 - previousTime) / 1e3, 0.05) : 0;
-        previousTime = time3;
-        if (!reducedMotion && !dragStart && !document.hidden) earthGroup.rotateY(delta * 0.075);
-        renderer.render(scene, camera);
-        requestAnimationFrame(animate);
-      };
-      requestAnimationFrame(animate);
-    } catch (error61) {
-      renderer?.dispose();
-      console.error("Travel globe could not start:", error61);
-      if (statusNote) {
-        statusNote.hidden = false;
-        statusNote.textContent = "The interactive 3D Earth could not load. Check WebGL support and reload.";
-      }
-    }
-  }
-  var EARTH_RADIUS, MARKER_RADIUS, reducedMotion, THREE;
-  var init_globe = __esm({
-    "../Front-end/js/globe.js?v=earth-3d-20261114-v2"() {
-      init_destinations();
-      init_trips();
-      init_storage();
-      init_journey_routes();
-      EARTH_RADIUS = 1;
-      MARKER_RADIUS = 1.018;
-      reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    }
-  });
-
   // ../Front-end/js/animations.js
   function initLandingMotion() {
     const root = document.documentElement;
@@ -29394,7 +28854,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     const hero = one(".ocean-hero"), day = one(".ocean-video"), moon = one(".moon-video");
     const stars = one(".night-sky-video"), meteors = one(".meteor-video");
     if (!hero || !day || !moon || !stars || !meteors) return;
-    const reducedMotion2 = matchMedia("(prefers-reduced-motion: reduce)");
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
     let isVisible = false;
     const pauseNightVideos = () => {
       stars.pause();
@@ -29402,7 +28862,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       moon.pause();
     };
     const syncPlayback = () => {
-      const shouldPlay = isVisible && !document.hidden && !reducedMotion2.matches;
+      const shouldPlay = isVisible && !document.hidden && !reducedMotion.matches;
       day.autoplay = shouldPlay;
       if (!shouldPlay) {
         day.pause();
@@ -29425,7 +28885,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       syncPlayback();
     });
     observer.observe(hero);
-    reducedMotion2.addEventListener("change", syncPlayback);
+    reducedMotion.addEventListener("change", syncPlayback);
     document.addEventListener("visibilitychange", syncPlayback);
     if (startDark) hero.classList.add("is-night");
     return (dark) => {
@@ -29436,12 +28896,12 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
   function initSignatureBackground() {
     const video = one(".signature-video");
     if (!video) return;
-    const reducedMotion2 = matchMedia("(prefers-reduced-motion: reduce)");
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
     const section = video.closest(".signature-journey");
     if (!section) return;
     let isVisible = false;
     const syncPlayback = () => {
-      video.autoplay = !reducedMotion2.matches && !document.hidden && isVisible;
+      video.autoplay = !reducedMotion.matches && !document.hidden && isVisible;
       if (video.autoplay) playBackgroundVideo(video);
       else video.pause();
     };
@@ -29451,7 +28911,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     }, { rootMargin: "160px 0px" });
     observer.observe(section);
     syncPlayback();
-    reducedMotion2.addEventListener("change", syncPlayback);
+    reducedMotion.addEventListener("change", syncPlayback);
     document.addEventListener("visibilitychange", syncPlayback);
   }
   function initWhyCarousel() {
@@ -29459,7 +28919,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     const track = one(".benefit-list", section);
     const slides = $$(".benefit", track);
     if (!section || !track || !slides.length) return;
-    const reducedMotion2 = matchMedia("(prefers-reduced-motion: reduce)");
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
     let active = 0;
     let timer;
     let isVisible = false;
@@ -29480,18 +28940,18 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     };
     const syncAutoplay = () => {
       stopAutoplay();
-      if (!isVisible || document.hidden || reducedMotion2.matches) return;
+      if (!isVisible || document.hidden || reducedMotion.matches) return;
       timer = setInterval(() => renderSlide(active + 1), 4200);
     };
     slides.forEach((slide) => slide.addEventListener("animationend", () => {
       slide.classList.remove("is-entering", "is-leaving");
     }));
     document.addEventListener("visibilitychange", syncAutoplay);
-    reducedMotion2.addEventListener("change", syncAutoplay);
+    reducedMotion.addEventListener("change", syncAutoplay);
     const observer = new IntersectionObserver(([entry]) => {
       const becameVisible = entry.isIntersecting && !isVisible;
       isVisible = entry.isIntersecting;
-      if (becameVisible && !reducedMotion2.matches) renderSlide(active + 1);
+      if (becameVisible && !reducedMotion.matches) renderSlide(active + 1);
       syncAutoplay();
     });
     observer.observe(section);
@@ -29531,11 +28991,11 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     const video = one(".experience-road-video");
     const source = one(".experience-road-video source");
     if (!section || !video || !source) return;
-    const reducedMotion2 = matchMedia("(prefers-reduced-motion: reduce)");
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
     let isVisible = false;
     let sourceLoaded = false;
     const syncPlayback = () => {
-      if (reducedMotion2.matches || !isVisible || document.hidden) {
+      if (reducedMotion.matches || !isVisible || document.hidden) {
         video.pause();
         return;
       }
@@ -29551,7 +29011,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       syncPlayback();
     }, { rootMargin: "240px 0px" });
     observer.observe(section);
-    reducedMotion2.addEventListener("change", syncPlayback);
+    reducedMotion.addEventListener("change", syncPlayback);
     document.addEventListener("visibilitychange", syncPlayback);
   }
   function renderHeader() {
@@ -29834,7 +29294,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       footerObserver.observe(footerAction);
     }
     const slides = $$(".testimonial-slide"), dots = $$(".slider-dot"), stage = one(".testimonial-stage");
-    const reducedMotion2 = matchMedia("(prefers-reduced-motion: reduce)");
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
     let active = 0, autoplayTimer, resumeTimer, wheelEndTimer, wheelDeltaX = 0, wheelGestureLocked = false, isPointerDown = false, activePointerId = null, pointerStartX = null, stageVisible = false;
     const renderSlide = (n) => {
       active = (n + slides.length) % slides.length;
@@ -29847,7 +29307,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         dot.setAttribute("aria-pressed", String(index === active));
       });
     };
-    const canAutoplay = () => stageVisible && !document.hidden && !reducedMotion2.matches;
+    const canAutoplay = () => stageVisible && !document.hidden && !reducedMotion.matches;
     const clearAutoplay = () => {
       clearTimeout(autoplayTimer);
       clearInterval(autoplayTimer);
@@ -29920,7 +29380,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       }
     });
     document.addEventListener("visibilitychange", () => scheduleAutoplay());
-    reducedMotion2.addEventListener("change", () => scheduleAutoplay());
+    reducedMotion.addEventListener("change", () => scheduleAutoplay());
     const stageObserver = new IntersectionObserver(([entry]) => {
       stageVisible = entry.isIntersecting;
       scheduleAutoplay();
@@ -29981,273 +29441,576 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
   });
 
   // ../Front-end/js/main.js
-  var require_main = __commonJS({
-    "../Front-end/js/main.js"() {
-      init_destinations();
-      init_trips();
-      init_reviews();
-      init_storage();
-      init_runtime();
-      init_globe();
-      bootstrapTravelX().then(() => {
-        bookingsPage2 = editableBookingsPage;
-        const path = location.pathname, inPages = /\/pages\//.test(path), rootEntry = !path.includes("/Front-end/") && !inPages, root = inPages ? "../" : "./", pageName = path.split("/").pop() || "index.html";
-        const img2 = (id, w = 900) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&q=82`;
-        const esc2 = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-        const link = (p) => p === "index.html" || p.startsWith("index.html#") ? root + "../" + p : root + "pages/" + p;
-        const $ = (q, el = document) => el.querySelector(q), $$2 = (q, el = document) => [...el.querySelectorAll(q)];
-        const data = read();
-        document.body.classList.toggle("dark", data.theme === "dark");
-        function image(id, alt, w) {
-          return `<img src="${img2(id, w)}" alt="${esc2(alt)}" loading="lazy" onerror="this.style.display='none';this.parentElement.style.background='#d9ded8'">`;
-        }
-        function avatarSource(value) {
-          return String(value || "").startsWith("data:image/") ? value : img2(value || "photo-1534528741775-53994a69daeb", 180);
-        }
-        function brandMarkup() {
-          return `<img class="brand-emblem" src="${root}assets/images/Luxury%20TravelX%20Globe%20Emblem.png" alt="TravelX">`;
-        }
-        function header() {
-          const user = activeUser();
-          return `<header class="topbar"><div class="container nav-inner"><a class="brand" href="${link("index.html")}" aria-label="TravelX home">${brandMarkup()}</a><nav class="nav-links" id="site-menu" aria-label="Main navigation">${[["Home", "index.html"], ["Destinations", "destinations.html"], ["About", "index.html#about"], ["Experiences", "search-results.html"], ["Reviews", "index.html#testimonials"], ["Journal", "index.html#journal"], ["Contact", "index.html#contact"]].map(([x, y]) => `<a href="${y.includes("#") ? root + y : link(y)}">${x}</a>`).join("")}</nav><div class="nav-actions"><button class="icon-btn theme-toggle" aria-label="Toggle theme">\u263C</button>${data.currentUser ? `<a class="account-chip" href="${link("profile.html")}"><img class="account-avatar" src="${esc2(avatarSource(user?.avatar))}" alt=""><span>${esc2(user?.name || "My account")}</span></a>` : `<a class="login-link" href="${link("login.html")}">Log in</a><a class="btn btn-gold" href="${link("register.html")}">Get started</a>`}<button class="icon-btn mobile-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="site-menu">\u2630</button></div></div></header>`;
-        }
-        function footer() {
-          return `<footer class="footer" id="contact"><div class="container"><div class="footer-grid"><div><a class="brand" href="${link("index.html")}" style="color:white">${brandMarkup()}</a><p class="muted">The world, thoughtfully yours.<br>Journeys made for the way you want to feel.</p></div><div><h4>Explore</h4><a href="${link("destinations.html")}">Destinations</a><a href="${link("search-results.html")}">Experiences</a><a href="${link("dashboard.html")}">Your trips</a></div><div><h4>TravelX</h4><a href="${link("index.html#about")}">Our story</a><a href="${link("index.html#contact")}">Contact</a><a href="${link("profile.html")}">Profile</a></div><div><h4>Stay inspired</h4><p class="muted">Thoughtful travel notes, occasionally.</p><form class="newsletter-form"><input type="email" name="email" required placeholder="Email address" aria-label="Email address"><button class="btn btn-gold">Join</button></form></div></div><div class="footer-bottom">\xA9 2025 TravelX. A thoughtful way to see the world.</div></div></footer><div class="toast" role="status" aria-live="polite"></div>`;
-        }
-        function initAuthPageBackground() {
-          const page2 = $(".auth-page"), form = $("#auth-form, #forgot-form, #reset-form");
-          if (!page2 || !form) return;
-          document.body.classList.add("auth-screen");
-          const video = document.createElement("video");
-          video.className = "auth-page-video";
-          video.autoplay = true;
-          video.muted = true;
-          video.loop = true;
-          video.playsInline = true;
-          video.setAttribute("aria-hidden", "true");
-          video.poster = root + "assets/videos/auth-beach-poster.jpg";
-          const source = document.createElement("source");
-          source.src = root + "assets/videos/auth-beach-background.mp4";
-          source.type = "video/mp4";
-          video.append(source);
-          page2.prepend(video);
-          const copy = $(".form-photo .auth-photo-copy");
-          if (copy) {
-            form.prepend(copy);
-            $(".form-photo")?.remove();
-          }
-          $(".footer")?.remove();
-        }
-        function shell(content) {
-          const accountWorkspace = data.currentUser && ["dashboard.html", "bookings.html", "favorites.html", "journeys.html", "profile.html"].includes(pageName);
-          document.body.classList.toggle("account-shell", Boolean(accountWorkspace));
-          if (!accountWorkspace) document.body.insertAdjacentHTML("afterbegin", header());
-          document.body.insertAdjacentHTML("beforeend", content + (accountWorkspace ? '<div class="toast" role="status" aria-live="polite"></div>' : footer()));
-          if (["login.html", "register.html", "forgot-password.html", "reset-password.html"].includes(pageName)) initAuthPageBackground();
-          wireShared();
-          wireNavigation();
-        }
-        function toast2(msg, type = "success") {
-          const t = $(".toast");
-          if (!t) return;
-          t.textContent = msg;
-          t.classList.toggle("is-error", type === "error");
-          t.classList.add("show");
-          clearTimeout(t.dismissTimer);
-          t.dismissTimer = setTimeout(() => t.classList.remove("show"), 3200);
-        }
-        function formFeedback(element, message, type = "success") {
-          if (!element) return;
-          element.textContent = message;
-          element.classList.toggle("is-success", Boolean(message) && type === "success");
-          element.classList.toggle("is-error", Boolean(message) && type === "error");
-        }
-        function cards(items) {
-          return items.map((d) => `<article class="card reveal"><div class="card-image"><a href="${link("destination-details.html")}?id=${d.id}">${image(d.image, d.name + " landscape")}</a><button class="fav" data-fav="${d.id}" aria-label="Save ${d.name}">\u2661</button></div><div class="card-body"><div class="card-meta"><span>${d.country} \xB7 ${d.category}</span><span>\u2605 ${d.rating}</span></div><h3>${d.name}</h3><p class="muted">${d.description}</p><div class="card-foot"><span>From <b class="price">$${d.price.toLocaleString()}</b> / person</span><a class="btn btn-outline" href="${link("destination-details.html")}?id=${d.id}">Discover \u2192</a></div></div></article>`).join("");
-        }
-        function home() {
-          const featured = destinations.slice(0, 3);
-          shell(`<main><section class="hero"><div class="container hero-content"><span class="eyebrow">The art of going well</span><h1>Travel Beyond<br>Ordinary.</h1><p>Considered journeys for curious souls. Discover the world at your own pace, with every detail thoughtfully arranged.</p><div class="hero-buttons"><a class="btn btn-gold" href="${link("destinations.html")}">Explore destinations \u2197</a><a class="btn btn-outline" href="${link("search-results.html")}">Discover experiences</a></div></div></section><div class="container search-panel"><form class="search-form"><div class="field"><label>Where to?</label><input name="destination" placeholder="Search a destination" list="dest-list"><datalist id="dest-list">${destinations.map((x) => `<option>${x.name}</option>`).join("")}</datalist></div><div class="field"><label>Check in</label><input name="start" type="date"></div><div class="field"><label>Check out</label><input name="end" type="date"></div><div class="field"><label>Guests</label><select name="guests"><option>2</option><option>1</option><option>3</option><option>4</option><option>5</option></select></div><button class="btn btn-forest">Search trips \u2192</button></form></div><section class="section"><div class="container"><div class="home-intro"><span class="eyebrow">Places to linger</span><h2 class="section-title">A world of possibility</h2><p class="muted">From quiet shores to storied cities, find the place that feels like yours.</p></div><div class="grid">${cards(featured)}</div><div style="text-align:center;margin-top:30px"><a class="btn btn-outline" href="${link("destinations.html")}">View all destinations \u2192</a></div></div></section><section class="section" style="background:var(--surface)"><div class="container split"><div>${image("photo-1476514525535-07fb3b4ae5f1", "A peaceful alpine lake", 1100).replace("<img", '<img class="split-image"')}<span class="tag" style="margin-top:14px">Curated with care</span></div><div><span class="eyebrow">Why TravelX</span><h2 class="section-title">The details make the journey.</h2><p class="muted">We believe great travel is about more than where you go. It is how a place makes you feel, and the people and moments that stay with you.</p><div class="feature-list"><div><strong>Thoughtful curation</strong><span class="muted">Every stay and experience chosen with intention.</span></div><div><strong>Local perspective</strong><span class="muted">Meaningful encounters, beyond the usual path.</span></div><div><strong>Seamless planning</strong><span class="muted">We take care of the details, so you can be present.</span></div><div><strong>Travel your way</strong><span class="muted">Flexible journeys built around you.</span></div></div><a class="btn btn-gold" style="margin-top:25px" href="${link("destinations.html")}">Find your journey \u2192</a></div></div></section><section class="section"><div class="container"><div class="center"><span class="eyebrow">Kind words</span><h2 class="section-title">Stories worth bringing home</h2></div><div class="grid">${reviews.map((r) => `<article class="review"><div class="stars">\u2605\u2605\u2605\u2605\u2605</div><p>\u201C${r.text}\u201D</p><strong>${r.name}</strong><div class="muted">Travelled to ${r.place}</div></article>`).join("")}</div></div></section><section class="newsletter"><div class="container"><span class="eyebrow">A note from the world</span><h2 class="section-title">Inspiration, delivered thoughtfully.</h2><p>Join our list for new journeys and considered travel notes.</p><form class="newsletter-form"><input type="email" required placeholder="Your email address" aria-label="Your email address"><button class="btn btn-gold">Subscribe \u2192</button></form></div></section></main>`);
-          const f = $(".search-form");
-          f.addEventListener("submit", (e) => {
-            e.preventDefault();
-            const q = new URLSearchParams(new FormData(f));
-            location.href = link("search-results.html") + "?" + q;
-          });
-        }
-        function destinationsPage() {
-          shell(`<main class="container"><div class="page-head"><span class="eyebrow">Find your somewhere</span><h1 class="section-title">Destinations</h1><p class="muted">Places that stay with you long after you leave.</p></div><div class="filters"><input id="dest-search" placeholder="Search destinations"><select id="category"><option value="">All categories</option>${["Beach", "Adventure", "Cultural", "Luxury", "Nature"].map((x) => `<option>${x}</option>`).join("")}</select><select id="sort"><option value="popular">Most loved</option><option value="low">Price: low to high</option><option value="high">Price: high to low</option></select><input id="max-price" type="number" placeholder="Max budget ($)"></div><div class="grid" id="dest-grid">${cards(destinations)}</div></main>`);
-          ["dest-search", "category", "sort", "max-price"].forEach((id) => $("#" + id).addEventListener("input", filterDest));
-        }
-        function filterDest() {
-          const term = $("#dest-search").value.toLowerCase(), cat = $("#category").value, max = Number($("#max-price").value) || Infinity, sort = $("#sort").value;
-          let list = destinations.filter((d) => (d.name.toLowerCase().includes(term) || d.country.toLowerCase().includes(term)) && (!cat || d.category === cat) && d.price <= max);
-          if (sort === "low") list.sort((a, b) => a.price - b.price);
-          if (sort === "high") list.sort((a, b) => b.price - a.price);
-          $("#dest-grid").innerHTML = list.length ? cards(list) : `<div class="empty" style="grid-column:1/-1"><h3>Nothing found just yet</h3><p class="muted">Try adjusting your search.</p></div>`;
-          bindFavs();
-        }
-        function detailsPage() {
-          const d = destinations.find((x) => x.id === new URLSearchParams(location.search).get("id")) || destinations[0], related = trips.filter((t) => t.destinationId === d.id);
-          shell(`<main><section class="detail-hero" style="background-image:linear-gradient(0deg,#101a16aa,transparent),url('${img2(d.image, 1700)}')"><div class="container"><span class="eyebrow">${d.country} \xB7 ${d.category}</span><h1 class="section-title" style="color:white;font-size:4rem">${d.name}</h1><p>\u2605 ${d.rating} \xB7 ${d.reviews} thoughtful traveller reviews</p></div></section><div class="container content-section"><div class="detail-layout"><div><span class="eyebrow">A sense of place</span><h2 class="section-title">Discover ${d.name}</h2><p class="muted">${d.description}</p><div class="gallery">${[d.image, related[0]?.image || d.image, "photo-1470770841072-f978cf4d019e"].map((im, i) => image(im, `${d.name} view ${i + 1}`, 800)).join("")}</div><h2 class="section-title" style="font-size:2rem;margin-top:35px">A few highlights</h2><ul>${d.attractions.map((x) => `<li>${x}</li>`).join("")}</ul><h2 class="section-title" style="font-size:2rem;margin-top:35px">Journeys here</h2>${related.map(tripRow).join("") || "<p>New journeys coming soon.</p>"}<h2 class="section-title" style="font-size:2rem;margin-top:35px">Find it on the map</h2><div class="map"><div id="map" data-lat="${d.lat}" data-lng="${d.lng}" data-name="${d.name}"></div></div></div><aside class="panel"><span class="eyebrow">Make it yours</span><h3 class="section-title" style="font-size:1.8rem">From $${d.price.toLocaleString()}</h3><p class="muted">per person \xB7 thoughtfully planned</p><p>\u2605\u2605\u2605\u2605\u2605 &nbsp; ${d.rating} (${d.reviews} reviews)</p><button class="btn btn-gold" style="width:100%" onclick="location.href='${link("search-results.html")}?destination=${d.name}'">Explore trips \u2192</button><button class="btn btn-outline" style="width:100%;margin-top:10px" data-fav="${d.id}">\u2661 Save to favourites</button></aside></div></div></main>`);
-        }
-        function tripRow(t) {
-          return `<article class="booking-row"><a href="${link("trip-details.html")}?id=${t.id}">${image(t.image, t.title, 400)}</a><div><a href="${link("trip-details.html")}?id=${t.id}"><strong>${t.title}</strong></a><div class="muted">${t.duration} days \xB7 from $${t.price.toLocaleString()}</div></div><a class="btn btn-outline row-action" href="${link("trip-details.html")}?id=${t.id}">View trip \u2192</a></article>`;
-        }
-        function searchPage() {
-          const params = new URLSearchParams(location.search), term = (params.get("destination") || "").toLowerCase(), matched = destinations.filter((d) => !term || d.name.toLowerCase().includes(term) || d.country.toLowerCase().includes(term)), tripList = trips.filter((t) => matched.some((d) => d.id === t.destinationId));
-          shell(`<main class="container"><div class="page-head"><span class="eyebrow">Your next chapter</span><h1 class="section-title">${term ? "Journeys for " + esc2(params.get("destination")) : "Experiences"}</h1><p class="muted">${tripList.length} considered journeys \xB7 ${params.get("guests") || 2} travellers</p></div><div class="filters"><select id="duration-filter"><option value="0">Any duration</option><option value="5">5+ days</option><option value="7">7+ days</option></select><select id="price-filter"><option value="0">Any price</option><option value="1800">Under $1,800</option><option value="2400">Under $2,400</option></select><select id="trip-sort"><option value="popular">Recommended</option><option value="low">Price: low to high</option></select></div><div id="trip-results">${tripList.length ? tripList.map(tripRow).join("") : `<div class="empty"><h3>No journeys match this search</h3><p class="muted">Explore all destinations to find your fit.</p><a class="btn btn-gold" href="${link("destinations.html")}">Browse destinations</a></div>`}</div></main>`);
-          const apply = () => {
-            let a = tripList.filter((t) => (!Number($("#duration-filter").value) || t.duration >= Number($("#duration-filter").value)) && (!Number($("#price-filter").value) || t.price <= Number($("#price-filter").value)));
-            if ($("#trip-sort").value === "low") a.sort((x, y) => x.price - y.price);
-            $("#trip-results").innerHTML = a.length ? a.map(tripRow).join("") : '<div class="empty">No trips match those filters.</div>';
-          };
-          $$2("#duration-filter,#price-filter,#trip-sort").forEach((el) => el.addEventListener("change", apply));
-        }
-        function tripPage() {
-          const t = trips.find((x) => x.id === new URLSearchParams(location.search).get("id")) || trips[0], d = destinations.find((x) => x.id === t.destinationId);
-          shell(`<main class="container"><div class="page-head"><span class="eyebrow">${d.name} \xB7 ${t.duration} days</span><h1 class="section-title">${t.title}</h1><p class="muted">A carefully considered journey in ${d.country}.</p></div><div class="two-col"><div><div class="gallery">${[t.image, d.image, "photo-1500530855697-b586d89ba3ee"].map((im, i) => image(im, `${t.title} scene ${i + 1}`, 900)).join("")}</div><h2 class="section-title" style="font-size:2rem;margin-top:30px">The journey</h2><p class="muted">${d.description}</p><h3>Day by day</h3><ol class="itinerary">${t.itinerary.map((x) => `<li>${x}</li>`).join("")}</ol><div class="two-col"><div><h3>Included</h3><ul class="check-list">${t.included.map((x) => `<li>${x}</li>`).join("")}</ul></div><div><h3>Not included</h3><ul>${t.excluded.map((x) => `<li>${x}</li>`).join("")}</ul></div></div></div><aside class="panel"><span class="eyebrow">A journey to remember</span><h2 class="section-title" style="font-size:2rem">From $${t.price.toLocaleString()}</h2><p class="muted">per person \xB7 ${t.dates}</p><label>Preferred travel date<input class="form-control" type="date" id="travel-date" min="${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}" style="width:100%;margin:8px 0"></label><label>Guests<select class="form-control" id="guest-count" style="width:100%;margin:8px 0"><option>2</option><option>1</option><option>3</option><option>4</option><option>5</option></select></label><button class="btn btn-gold" id="reserve-trip" style="width:100%;margin-top:14px">Reserve this journey \u2192</button><p class="muted" style="font-size:.8rem;text-align:center">No payment is taken in this demo.</p><p>\u2605 ${d.rating} \xB7 ${d.reviews} reviews</p></aside></div></main>`);
-          $("#reserve-trip").addEventListener("click", () => {
-            const q = new URLSearchParams({ trip: t.id, guests: $("#guest-count").value });
-            if ($("#travel-date").value) q.set("date", $("#travel-date").value);
-            location.href = link("checkout.html") + "?" + q;
-          });
-        }
-        function authPage(register = false) {
-          const title = register ? "Create your account" : "Welcome back";
-          shell(`<main class="form-page auth-page"><section class="form-photo" aria-hidden="true"><div class="auth-photo-copy"><span>TRAVELX PRIVATE</span><strong>Travel begins<br>with a feeling.</strong><small>Made for the way you want to feel.</small></div></section><div class="form-wrap"><form class="form-box" id="auth-form"><div class="auth-card-head"><span class="eyebrow">${register ? "YOUR TRAVELX ACCOUNT" : "WELCOME TO TRAVELX"}</span><span>01</span></div><h1>${title}</h1><p class="muted">${register ? "Start planning journeys that feel like yours." : "Sign in to continue your journey."}</p><p id="auth-error" class="muted" role="alert" aria-live="polite" hidden></p>${register ? `<label>Full name<input class="form-control" name="name" required autocomplete="name" placeholder="Your full name"></label>` : ""}<label>Email address<input class="form-control" name="email" type="email" required autocomplete="email" placeholder="you@example.com"></label><label>Password<div class="password-wrap"><input class="form-control" name="password" type="password" required minlength="${register ? 8 : 1}" autocomplete="${register ? "new-password" : "current-password"}" placeholder="${register ? "At least 8 characters" : "Your password"}"><button type="button" class="show-password">Show</button></div></label>${register ? `<label>Confirm password<input class="form-control" name="confirm" type="password" required placeholder="Repeat your password"></label>` : `<div class="auth-options"><label><input name="remember" type="checkbox"> Remember me</label><a class="muted" href="${link("forgot-password.html")}" id="forgot">Forgot password?</a></div>`}<button class="btn btn-gold" type="submit">${register ? "Create account" : "Log in"} <span>\u2197</span></button><p class="auth-switch muted">${register ? "Already have an account?" : "New to TravelX?"} <a href="${link(register ? "login.html" : "register.html")}">${register ? "Log in" : "Create an account"}</a></p></form></div></main>`);
-          const form = $("#auth-form");
-          const errorMessage = $("#auth-error");
-          form.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            errorMessage.hidden = true;
-            const formData = new FormData(form);
-            if (register && formData.get("password") !== formData.get("confirm")) {
-              errorMessage.textContent = "Passwords do not match.";
-              errorMessage.hidden = false;
-              return;
-            }
-            const submitButton = form.querySelector('button[type="submit"]');
-            submitButton.disabled = true;
-            try {
-              const result = await authenticate(formData, register);
-              if (result.verificationRequired) {
-                errorMessage.textContent = "Account created. Verify your email, then sign in.";
-                errorMessage.hidden = false;
-                return;
+  init_destinations();
+  init_trips();
+
+  // ../Front-end/data/reviews.js
+  var reviews = [{ name: "Amelia R.", place: "The Maldives", text: "Every detail felt considered. We came home rested, inspired, and already planning the next trip.", stars: 5 }, { name: "Daniel K.", place: "Swiss Alps", text: "The rail route and local guide made the mountains feel wonderfully personal.", stars: 5 }, { name: "Sofia M.", place: "Bali", text: "A beautiful balance of quiet, culture and the little moments we will remember most.", stars: 5 }];
+
+  // ../Front-end/js/main.js
+  init_storage();
+  init_runtime();
+
+  // ../Front-end/js/globe.js?v=earth-3d-20261114-v2
+  init_destinations();
+  init_trips();
+  init_storage();
+
+  // ../Front-end/js/journey-routes.mjs
+  var VISITED_STATUSES = /* @__PURE__ */ new Set(["completed"]);
+  var UPCOMING_STATUSES = /* @__PURE__ */ new Set(["upcoming", "confirmed", "pending"]);
+  function getVisitState(booking, today) {
+    const status = String(booking.status || "").trim().toLowerCase();
+    if (status === "cancelled" || status === "canceled") return null;
+    const date5 = String(booking.date || "").slice(0, 10);
+    if (VISITED_STATUSES.has(status) || date5 && date5 < today) return "visited";
+    if (UPCOMING_STATUSES.has(status) || date5 && date5 >= today) return "upcoming";
+    return null;
+  }
+  function coordinatesFor(destination) {
+    const latitude = Number(destination.lat);
+    const longitude = Number(destination.lng);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+    return [longitude, latitude];
+  }
+  function toVector([longitude, latitude]) {
+    const lambda = longitude * Math.PI / 180;
+    const phi = latitude * Math.PI / 180;
+    return [
+      Math.cos(phi) * Math.cos(lambda),
+      Math.cos(phi) * Math.sin(lambda),
+      Math.sin(phi)
+    ];
+  }
+  function toCoordinates([x, y, z2]) {
+    return [
+      Math.atan2(y, x) * 180 / Math.PI,
+      Math.atan2(z2, Math.hypot(x, y)) * 180 / Math.PI
+    ];
+  }
+  function splitAtDateLine(points) {
+    const lines = [[]];
+    for (const point of points) {
+      const line = lines.at(-1);
+      const previous = line.at(-1);
+      if (!previous) {
+        line.push(point);
+        continue;
+      }
+      const [previousLongitude, previousLatitude] = previous;
+      const [longitude, latitude] = point;
+      const longitudeDelta = longitude - previousLongitude;
+      if (longitudeDelta > 180 || longitudeDelta < -180) {
+        const adjustedLongitude = longitudeDelta > 180 ? longitude - 360 : longitude + 360;
+        const boundaryLongitude = longitudeDelta > 180 ? -180 : 180;
+        const crossingRatio = (boundaryLongitude - previousLongitude) / (adjustedLongitude - previousLongitude);
+        const crossingLatitude = previousLatitude + (latitude - previousLatitude) * crossingRatio;
+        line.push([boundaryLongitude, crossingLatitude]);
+        lines.push([[boundaryLongitude === 180 ? -180 : 180, crossingLatitude], point]);
+      } else {
+        line.push(point);
+      }
+    }
+    return lines.filter((line) => line.length > 1);
+  }
+  function createGreatCircleGeometry(start, end) {
+    const startVector = toVector(start);
+    const endVector = toVector(end);
+    const dot = Math.max(-1, Math.min(
+      1,
+      startVector.reduce((sum, value, index) => sum + value * endVector[index], 0)
+    ));
+    const angle = Math.acos(dot);
+    const steps = Math.max(12, Math.min(96, Math.ceil(angle * 180 / Math.PI / 2)));
+    const coordinates = [];
+    for (let step = 0; step <= steps; step += 1) {
+      const fraction = step / steps;
+      let vector;
+      if (angle < 1e-8) {
+        vector = startVector;
+      } else if (Math.abs(Math.sin(angle)) < 1e-8) {
+        vector = startVector.map((value, index) => value * (1 - fraction) + endVector[index] * fraction);
+      } else {
+        const startWeight = Math.sin((1 - fraction) * angle) / Math.sin(angle);
+        const endWeight = Math.sin(fraction * angle) / Math.sin(angle);
+        vector = startVector.map((value, index) => value * startWeight + endVector[index] * endWeight);
+      }
+      coordinates.push(toCoordinates(vector));
+    }
+    const lines = splitAtDateLine(coordinates);
+    return lines.length > 1 ? { type: "MultiLineString", coordinates: lines } : { type: "LineString", coordinates: lines[0] || coordinates };
+  }
+  function buildJourneyMapData(bookings, destinations2, trips2, today) {
+    const destinationById = new Map(destinations2.map((destination) => [destination.id, destination]));
+    const tripById = new Map(trips2.map((trip) => [trip.id, trip]));
+    const visits = bookings.flatMap((booking, originalIndex) => {
+      const state = getVisitState(booking, today);
+      if (!state) return [];
+      const trip = tripById.get(booking.tripId);
+      const destinationId = booking.destinationId || trip?.destinationId;
+      const destination = destinationById.get(destinationId);
+      const coordinates = destination && coordinatesFor(destination);
+      if (!destination || !coordinates) return [];
+      return [{
+        destination,
+        destinationId,
+        coordinates,
+        date: String(booking.date || "").slice(0, 10),
+        state,
+        originalIndex
+      }];
+    }).sort((left, right) => {
+      if (left.date && right.date) return left.date.localeCompare(right.date) || left.originalIndex - right.originalIndex;
+      if (left.date) return -1;
+      if (right.date) return 1;
+      return left.originalIndex - right.originalIndex;
+    });
+    const visited = visits.filter((visit2) => visit2.state === "visited");
+    const upcoming = visits.filter((visit2) => visit2.state === "upcoming");
+    const markerByDestination = /* @__PURE__ */ new Map();
+    for (const visit2 of visits) {
+      const previous = markerByDestination.get(visit2.destinationId);
+      if (!previous || visit2.state === "upcoming") {
+        markerByDestination.set(visit2.destinationId, visit2);
+      }
+    }
+    const routes = ["visited", "upcoming"].flatMap((state) => {
+      const routeVisits = state === "visited" ? visited : upcoming;
+      return routeVisits.slice(1).flatMap((visit2, index) => {
+        const previous = routeVisits[index];
+        if (previous.destinationId === visit2.destinationId) return [];
+        return [{
+          state,
+          from: previous.destination.name,
+          to: visit2.destination.name,
+          geometry: createGreatCircleGeometry(previous.coordinates, visit2.coordinates)
+        }];
+      });
+    });
+    return {
+      markers: [...markerByDestination.values()],
+      routes,
+      visited,
+      upcoming
+    };
+  }
+
+  // ../Front-end/js/globe.js?v=earth-3d-20261114-v2
+  function popupContent(visit2) {
+    const content = document.createElement("div");
+    content.className = "journey-map-popup";
+    const title = document.createElement("strong");
+    title.textContent = visit2.destination.name;
+    const country = document.createElement("span");
+    country.textContent = visit2.destination.country;
+    const status = document.createElement("small");
+    status.textContent = visit2.state === "visited" ? "Visited" : "Upcoming";
+    content.append(title, country, status);
+    return content;
+  }
+  function renderJourneyList(list, visits, focusOn) {
+    if (!list) return;
+    list.replaceChildren();
+    visits.forEach((visit2, index) => {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "globe-route-stop";
+      const number4 = document.createElement("span");
+      number4.className = "globe-route-stop-number";
+      number4.textContent = String(index + 1).padStart(2, "0");
+      const place = document.createElement("span");
+      place.className = "globe-route-stop-place";
+      const name2 = document.createElement("strong");
+      name2.textContent = visit2.destination.name;
+      const country = document.createElement("small");
+      country.textContent = visit2.destination.country;
+      place.append(name2, country);
+      const date5 = document.createElement("time");
+      date5.className = "globe-route-stop-date";
+      if (visit2.date) {
+        date5.dateTime = visit2.date;
+        date5.textContent = (/* @__PURE__ */ new Date(`${visit2.date}T00:00:00`)).toLocaleDateString(void 0, {
+          month: "short",
+          year: "numeric"
+        });
+      } else {
+        date5.textContent = "Date not set";
+      }
+      button.append(number4, place, date5);
+      button.addEventListener("click", () => focusOn(visit2));
+      item.append(button);
+      list.append(item);
+    });
+  }
+  async function initJourneyGlobe(bookings = read().bookings, loadError = "") {
+    const container = document.querySelector("#journey-globe-map");
+    if (!container) return;
+    const statusNote = document.querySelector(".globe-empty-note");
+    const visitedCount = document.querySelector("#visited-count");
+    const upcomingCount = document.querySelector("#upcoming-count");
+    try {
+      const maplibregl = await import("https://unpkg.com/maplibre-gl@6.18.0/dist/maplibre-gl.mjs");
+      const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+      const journeyData = buildJourneyMapData(bookings, destinations, trips, today);
+      const { markers, visited, upcoming } = journeyData;
+      if (visitedCount) visitedCount.textContent = String(new Set(visited.map((visit2) => visit2.destinationId)).size);
+      if (upcomingCount) upcomingCount.textContent = String(new Set(upcoming.map((visit2) => visit2.destinationId)).size);
+      if (statusNote) {
+        statusNote.hidden = !loadError && markers.length > 0;
+        if (loadError) statusNote.textContent = `Could not refresh your bookings: ${loadError}`;
+      }
+      const map2 = new maplibregl.Map({
+        container,
+        style: "https://tiles.openfreemap.org/styles/liberty",
+        center: [20, 22],
+        zoom: 1.7,
+        minZoom: 1.1,
+        maxZoom: 19,
+        renderWorldCopies: false,
+        maxPitch: 60,
+        cooperativeGestures: false,
+        attributionControl: true
+      });
+      map2.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+      const showVisit = (visit2) => {
+        map2.flyTo({ center: visit2.coordinates, zoom: Math.max(map2.getZoom(), 6), speed: 1.2 });
+        new maplibregl.Popup({ offset: 14, closeButton: true, maxWidth: "230px" }).setLngLat(visit2.coordinates).setDOMContent(popupContent(visit2)).addTo(map2);
+      };
+      renderJourneyList(document.querySelector("#visited-route-list"), visited, showVisit);
+      renderJourneyList(document.querySelector("#upcoming-route-list"), upcoming, showVisit);
+      map2.on("style.load", () => {
+        map2.setProjection({ type: "globe" });
+        map2.setFog({});
+        map2.addSource("journey-stops", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: markers.map((visit2) => ({
+              type: "Feature",
+              properties: {
+                id: visit2.destinationId,
+                name: visit2.destination.name,
+                country: visit2.destination.country,
+                state: visit2.state
+              },
+              geometry: {
+                type: "Point",
+                // GeoJSON coordinates are always [longitude, latitude].
+                coordinates: visit2.coordinates
               }
-              location.href = link("dashboard.html");
-            } catch (error61) {
-              errorMessage.textContent = error61.message || "Authentication failed. Please try again.";
-              errorMessage.hidden = false;
-            } finally {
-              submitButton.disabled = false;
-            }
-          });
-          $(".show-password").addEventListener("click", (event) => {
-            const input2 = $('[name="password"]');
-            input2.type = input2.type === "password" ? "text" : "password";
-            event.currentTarget.textContent = input2.type === "password" ? "Show" : "Hide";
-          });
-        }
-        function forgotPasswordPage() {
-          shell(`<main class="form-page auth-page"><section class="form-photo" aria-hidden="true"><div class="auth-photo-copy"><span>TRAVELX ACCOUNT</span><strong>A fresh start<br>is one email away.</strong><small>We\u2019ll send you a secure password reset link.</small></div></section><div class="form-wrap"><form class="form-box" id="forgot-form"><div class="auth-card-head"><span class="eyebrow">ACCOUNT RECOVERY</span><span>01</span></div><h1>Reset your password</h1><p class="muted">Enter the email address linked to your TravelX account.</p><p id="forgot-message" class="form-feedback" role="status" aria-live="polite" hidden></p><label>Email address<input class="form-control" name="email" type="email" required autocomplete="email" placeholder="you@example.com"></label><button class="btn btn-gold" type="submit">Send reset link <span>\u2197</span></button><p class="auth-switch muted"><a href="${link("login.html")}">Back to log in</a></p></form></div></main>`);
-          initAuthPageBackground();
-          const form = $("#forgot-form"), message = $("#forgot-message");
-          form.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            const button = form.querySelector('button[type="submit"]');
-            button.disabled = true;
-            formFeedback(message, "Sending reset link\u2026", "neutral");
-            message.hidden = false;
-            try {
-              await sendPasswordReset(new FormData(form).get("email"));
-              formFeedback(message, "If an account exists for this email, a password reset link is on its way.");
-              form.reset();
-            } catch (error61) {
-              formFeedback(message, error61.message, "error");
-            } finally {
-              button.disabled = false;
-            }
-          });
-        }
-        function resetPasswordPage() {
-          const token = new URLSearchParams(location.search).get("token");
-          shell(`<main class="form-page auth-page"><section class="form-photo" aria-hidden="true"><div class="auth-photo-copy"><span>TRAVELX ACCOUNT</span><strong>Choose a new<br>password.</strong><small>Your new password keeps your journeys secure.</small></div></section><div class="form-wrap"><form class="form-box" id="reset-form"><div class="auth-card-head"><span class="eyebrow">SECURE YOUR ACCOUNT</span><span>02</span></div><h1>Set a new password</h1><p class="muted">Choose a password with at least 8 characters.</p><p id="reset-message" class="form-feedback" role="alert" aria-live="polite" ${token ? "hidden" : ""}>This reset link is missing or invalid. Request a new one.</p><label>New password<input class="form-control" name="password" type="password" required minlength="8" autocomplete="new-password"></label><label>Confirm new password<input class="form-control" name="confirm" type="password" required minlength="8" autocomplete="new-password"></label><button class="btn btn-gold" type="submit" ${token ? "" : "disabled"}>Update password <span>\u2197</span></button><p class="auth-switch muted"><a href="${link("login.html")}">Back to log in</a></p></form></div></main>`);
-          initAuthPageBackground();
-          const form = $("#reset-form"), message = $("#reset-message");
-          form.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            if (!token) return;
-            if (form.elements.password.value !== form.elements.confirm.value) {
-              formFeedback(message, "The passwords do not match.", "error");
-              message.hidden = false;
-              return;
-            }
-            const button = form.querySelector('button[type="submit"]');
-            button.disabled = true;
-            formFeedback(message, "Updating your password\u2026", "neutral");
-            message.hidden = false;
-            try {
-              await completePasswordReset(token, form.elements.password.value);
-              formFeedback(message, "Your password has been updated. You can now log in.");
-              form.reset();
-            } catch (error61) {
-              formFeedback(message, error61.message, "error");
-            } finally {
-              button.disabled = false;
-            }
-          });
-        }
-        function currentGuard() {
-          if (!window.__TRAVELX_AUTHENTICATED__) {
-            location.href = link("login.html");
-            return false;
+            }))
           }
-          return true;
+        });
+        map2.addLayer({
+          id: "journey-stops-halo",
+          type: "circle",
+          source: "journey-stops",
+          paint: {
+            "circle-radius": 13,
+            "circle-color": ["match", ["get", "state"], "visited", "#69d4a0", "#f0bd62"],
+            "circle-opacity": 0.34,
+            "circle-blur": 0.2
+          }
+        });
+        map2.addLayer({
+          id: "journey-stops-marker",
+          type: "circle",
+          source: "journey-stops",
+          paint: {
+            "circle-radius": 7,
+            "circle-color": ["match", ["get", "state"], "visited", "#69d4a0", "#f0bd62"],
+            "circle-stroke-color": "#10251e",
+            "circle-stroke-width": 2
+          }
+        });
+        map2.on("click", "journey-stops-marker", (event) => {
+          const feature = event.features?.[0];
+          if (!feature) return;
+          const visit2 = markers.find((item) => item.destinationId === feature.properties.id);
+          if (visit2) showVisit(visit2);
+        });
+        map2.on("mouseenter", "journey-stops-marker", () => {
+          map2.getCanvas().style.cursor = "pointer";
+        });
+        map2.on("mouseleave", "journey-stops-marker", () => {
+          map2.getCanvas().style.cursor = "";
+        });
+      });
+      document.querySelectorAll("[data-globe-reset]").forEach((button) => button.addEventListener("click", () => {
+        map2.flyTo({ center: [20, 22], zoom: 1.7, pitch: 0, bearing: 0, speed: 1.1 });
+      }));
+      window.addEventListener("resize", () => map2.resize(), { passive: true });
+      map2.once("load", () => requestAnimationFrame(() => map2.resize()));
+    } catch (error61) {
+      console.error("Travel globe could not start:", error61);
+      if (statusNote) {
+        statusNote.hidden = false;
+        statusNote.textContent = "The interactive map could not load. Check your internet connection and reload.";
+      }
+    }
+  }
+
+  // ../Front-end/js/main.js
+  bootstrapTravelX().then(() => {
+    bookingsPage = editableBookingsPage;
+    const path = location.pathname, inPages = /\/pages\//.test(path), rootEntry = !path.includes("/Front-end/") && !inPages, root = inPages ? "../" : "./", pageName = path.split("/").pop() || "index.html";
+    const img2 = (id, w = 900) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&q=82`;
+    const esc2 = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const link = (p) => p === "index.html" || p.startsWith("index.html#") ? root + "../" + p : root + "pages/" + p;
+    const $ = (q, el = document) => el.querySelector(q), $$2 = (q, el = document) => [...el.querySelectorAll(q)];
+    const data = read();
+    document.body.classList.toggle("dark", data.theme === "dark");
+    function image(id, alt, w) {
+      return `<img src="${img2(id, w)}" alt="${esc2(alt)}" loading="lazy" onerror="this.style.display='none';this.parentElement.style.background='#d9ded8'">`;
+    }
+    function avatarSource(value) {
+      return String(value || "").startsWith("data:image/") ? value : img2(value || "photo-1534528741775-53994a69daeb", 180);
+    }
+    function brandMarkup() {
+      return `<img class="brand-emblem" src="${root}assets/images/Luxury%20TravelX%20Globe%20Emblem.png" alt="TravelX">`;
+    }
+    function header() {
+      const user = activeUser();
+      return `<header class="topbar"><div class="container nav-inner"><a class="brand" href="${link("index.html")}" aria-label="TravelX home">${brandMarkup()}</a><nav class="nav-links" id="site-menu" aria-label="Main navigation">${[["Home", "index.html"], ["Destinations", "destinations.html"], ["About", "index.html#about"], ["Experiences", "search-results.html"], ["Reviews", "index.html#testimonials"], ["Journal", "index.html#journal"], ["Contact", "index.html#contact"]].map(([x, y]) => `<a href="${y.includes("#") ? root + y : link(y)}">${x}</a>`).join("")}</nav><div class="nav-actions"><button class="icon-btn theme-toggle" aria-label="Toggle theme">\u263C</button>${data.currentUser ? `<a class="account-chip" href="${link("profile.html")}"><img class="account-avatar" src="${esc2(avatarSource(user?.avatar))}" alt=""><span>${esc2(user?.name || "My account")}</span></a>` : `<a class="login-link" href="${link("login.html")}">Log in</a><a class="btn btn-gold" href="${link("register.html")}">Get started</a>`}<button class="icon-btn mobile-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="site-menu">\u2630</button></div></div></header>`;
+    }
+    function footer() {
+      return `<footer class="footer" id="contact"><div class="container"><div class="footer-grid"><div><a class="brand" href="${link("index.html")}" style="color:white">${brandMarkup()}</a><p class="muted">The world, thoughtfully yours.<br>Journeys made for the way you want to feel.</p></div><div><h4>Explore</h4><a href="${link("destinations.html")}">Destinations</a><a href="${link("search-results.html")}">Experiences</a><a href="${link("dashboard.html")}">Your trips</a></div><div><h4>TravelX</h4><a href="${link("index.html#about")}">Our story</a><a href="${link("index.html#contact")}">Contact</a><a href="${link("profile.html")}">Profile</a></div><div><h4>Stay inspired</h4><p class="muted">Thoughtful travel notes, occasionally.</p><form class="newsletter-form"><input type="email" name="email" required placeholder="Email address" aria-label="Email address"><button class="btn btn-gold">Join</button></form></div></div><div class="footer-bottom">\xA9 2025 TravelX. A thoughtful way to see the world.</div></div></footer><div class="toast" role="status" aria-live="polite"></div>`;
+    }
+    function initAuthPageBackground() {
+      const page2 = $(".auth-page"), form = $("#auth-form, #forgot-form, #reset-form");
+      if (!page2 || !form) return;
+      document.body.classList.add("auth-screen");
+      const video = document.createElement("video");
+      video.className = "auth-page-video";
+      video.autoplay = true;
+      video.muted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.setAttribute("aria-hidden", "true");
+      video.poster = root + "assets/videos/auth-beach-poster.jpg";
+      const source = document.createElement("source");
+      source.src = root + "assets/videos/auth-beach-background.mp4";
+      source.type = "video/mp4";
+      video.append(source);
+      page2.prepend(video);
+      const copy = $(".form-photo .auth-photo-copy");
+      if (copy) {
+        form.prepend(copy);
+        $(".form-photo")?.remove();
+      }
+      $(".footer")?.remove();
+    }
+    function shell(content) {
+      const accountWorkspace = data.currentUser && ["dashboard.html", "bookings.html", "favorites.html", "journeys.html", "profile.html"].includes(pageName);
+      document.body.classList.toggle("account-shell", Boolean(accountWorkspace));
+      if (!accountWorkspace) document.body.insertAdjacentHTML("afterbegin", header());
+      document.body.insertAdjacentHTML("beforeend", content + (accountWorkspace ? '<div class="toast" role="status" aria-live="polite"></div>' : footer()));
+      if (["login.html", "register.html", "forgot-password.html", "reset-password.html"].includes(pageName)) initAuthPageBackground();
+      wireShared();
+      wireNavigation();
+    }
+    function toast2(msg, type = "success") {
+      const t = $(".toast");
+      if (!t) return;
+      t.textContent = msg;
+      t.classList.toggle("is-error", type === "error");
+      t.classList.add("show");
+      clearTimeout(t.dismissTimer);
+      t.dismissTimer = setTimeout(() => t.classList.remove("show"), 3200);
+    }
+    function formFeedback(element, message, type = "success") {
+      if (!element) return;
+      element.textContent = message;
+      element.classList.toggle("is-success", Boolean(message) && type === "success");
+      element.classList.toggle("is-error", Boolean(message) && type === "error");
+    }
+    function cards(items) {
+      return items.map((d) => `<article class="card reveal"><div class="card-image"><a href="${link("destination-details.html")}?id=${d.id}">${image(d.image, d.name + " landscape")}</a><button class="fav" data-fav="${d.id}" aria-label="Save ${d.name}">\u2661</button></div><div class="card-body"><div class="card-meta"><span>${d.country} \xB7 ${d.category}</span><span>\u2605 ${d.rating}</span></div><h3>${d.name}</h3><p class="muted">${d.description}</p><div class="card-foot"><span>From <b class="price">$${d.price.toLocaleString()}</b> / person</span><a class="btn btn-outline" href="${link("destination-details.html")}?id=${d.id}">Discover \u2192</a></div></div></article>`).join("");
+    }
+    function home() {
+      const featured = destinations.slice(0, 3);
+      shell(`<main><section class="hero"><div class="container hero-content"><span class="eyebrow">The art of going well</span><h1>Travel Beyond<br>Ordinary.</h1><p>Considered journeys for curious souls. Discover the world at your own pace, with every detail thoughtfully arranged.</p><div class="hero-buttons"><a class="btn btn-gold" href="${link("destinations.html")}">Explore destinations \u2197</a><a class="btn btn-outline" href="${link("search-results.html")}">Discover experiences</a></div></div></section><div class="container search-panel"><form class="search-form"><div class="field"><label>Where to?</label><input name="destination" placeholder="Search a destination" list="dest-list"><datalist id="dest-list">${destinations.map((x) => `<option>${x.name}</option>`).join("")}</datalist></div><div class="field"><label>Check in</label><input name="start" type="date"></div><div class="field"><label>Check out</label><input name="end" type="date"></div><div class="field"><label>Guests</label><select name="guests"><option>2</option><option>1</option><option>3</option><option>4</option><option>5</option></select></div><button class="btn btn-forest">Search trips \u2192</button></form></div><section class="section"><div class="container"><div class="home-intro"><span class="eyebrow">Places to linger</span><h2 class="section-title">A world of possibility</h2><p class="muted">From quiet shores to storied cities, find the place that feels like yours.</p></div><div class="grid">${cards(featured)}</div><div style="text-align:center;margin-top:30px"><a class="btn btn-outline" href="${link("destinations.html")}">View all destinations \u2192</a></div></div></section><section class="section" style="background:var(--surface)"><div class="container split"><div>${image("photo-1476514525535-07fb3b4ae5f1", "A peaceful alpine lake", 1100).replace("<img", '<img class="split-image"')}<span class="tag" style="margin-top:14px">Curated with care</span></div><div><span class="eyebrow">Why TravelX</span><h2 class="section-title">The details make the journey.</h2><p class="muted">We believe great travel is about more than where you go. It is how a place makes you feel, and the people and moments that stay with you.</p><div class="feature-list"><div><strong>Thoughtful curation</strong><span class="muted">Every stay and experience chosen with intention.</span></div><div><strong>Local perspective</strong><span class="muted">Meaningful encounters, beyond the usual path.</span></div><div><strong>Seamless planning</strong><span class="muted">We take care of the details, so you can be present.</span></div><div><strong>Travel your way</strong><span class="muted">Flexible journeys built around you.</span></div></div><a class="btn btn-gold" style="margin-top:25px" href="${link("destinations.html")}">Find your journey \u2192</a></div></div></section><section class="section"><div class="container"><div class="center"><span class="eyebrow">Kind words</span><h2 class="section-title">Stories worth bringing home</h2></div><div class="grid">${reviews.map((r) => `<article class="review"><div class="stars">\u2605\u2605\u2605\u2605\u2605</div><p>\u201C${r.text}\u201D</p><strong>${r.name}</strong><div class="muted">Travelled to ${r.place}</div></article>`).join("")}</div></div></section><section class="newsletter"><div class="container"><span class="eyebrow">A note from the world</span><h2 class="section-title">Inspiration, delivered thoughtfully.</h2><p>Join our list for new journeys and considered travel notes.</p><form class="newsletter-form"><input type="email" required placeholder="Your email address" aria-label="Your email address"><button class="btn btn-gold">Subscribe \u2192</button></form></div></section></main>`);
+      const f = $(".search-form");
+      f.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const q = new URLSearchParams(new FormData(f));
+        location.href = link("search-results.html") + "?" + q;
+      });
+    }
+    function destinationsPage() {
+      shell(`<main class="container"><div class="page-head"><span class="eyebrow">Find your somewhere</span><h1 class="section-title">Destinations</h1><p class="muted">Places that stay with you long after you leave.</p></div><div class="filters"><input id="dest-search" placeholder="Search destinations"><select id="category"><option value="">All categories</option>${["Beach", "Adventure", "Cultural", "Luxury", "Nature"].map((x) => `<option>${x}</option>`).join("")}</select><select id="sort"><option value="popular">Most loved</option><option value="low">Price: low to high</option><option value="high">Price: high to low</option></select><input id="max-price" type="number" placeholder="Max budget ($)"></div><div class="grid" id="dest-grid">${cards(destinations)}</div></main>`);
+      ["dest-search", "category", "sort", "max-price"].forEach((id) => $("#" + id).addEventListener("input", filterDest));
+    }
+    function filterDest() {
+      const term = $("#dest-search").value.toLowerCase(), cat = $("#category").value, max = Number($("#max-price").value) || Infinity, sort = $("#sort").value;
+      let list = destinations.filter((d) => (d.name.toLowerCase().includes(term) || d.country.toLowerCase().includes(term)) && (!cat || d.category === cat) && d.price <= max);
+      if (sort === "low") list.sort((a, b) => a.price - b.price);
+      if (sort === "high") list.sort((a, b) => b.price - a.price);
+      $("#dest-grid").innerHTML = list.length ? cards(list) : `<div class="empty" style="grid-column:1/-1"><h3>Nothing found just yet</h3><p class="muted">Try adjusting your search.</p></div>`;
+      bindFavs();
+    }
+    function detailsPage() {
+      const d = destinations.find((x) => x.id === new URLSearchParams(location.search).get("id")) || destinations[0], related = trips.filter((t) => t.destinationId === d.id);
+      shell(`<main><section class="detail-hero" style="background-image:linear-gradient(0deg,#101a16aa,transparent),url('${img2(d.image, 1700)}')"><div class="container"><span class="eyebrow">${d.country} \xB7 ${d.category}</span><h1 class="section-title" style="color:white;font-size:4rem">${d.name}</h1><p>\u2605 ${d.rating} \xB7 ${d.reviews} thoughtful traveller reviews</p></div></section><div class="container content-section"><div class="detail-layout"><div><span class="eyebrow">A sense of place</span><h2 class="section-title">Discover ${d.name}</h2><p class="muted">${d.description}</p><div class="gallery">${[d.image, related[0]?.image || d.image, "photo-1470770841072-f978cf4d019e"].map((im, i) => image(im, `${d.name} view ${i + 1}`, 800)).join("")}</div><h2 class="section-title" style="font-size:2rem;margin-top:35px">A few highlights</h2><ul>${d.attractions.map((x) => `<li>${x}</li>`).join("")}</ul><h2 class="section-title" style="font-size:2rem;margin-top:35px">Journeys here</h2>${related.map(tripRow).join("") || "<p>New journeys coming soon.</p>"}<h2 class="section-title" style="font-size:2rem;margin-top:35px">Find it on the map</h2><div class="map"><div id="map" data-lat="${d.lat}" data-lng="${d.lng}" data-name="${d.name}"></div></div></div><aside class="panel"><span class="eyebrow">Make it yours</span><h3 class="section-title" style="font-size:1.8rem">From $${d.price.toLocaleString()}</h3><p class="muted">per person \xB7 thoughtfully planned</p><p>\u2605\u2605\u2605\u2605\u2605 &nbsp; ${d.rating} (${d.reviews} reviews)</p><button class="btn btn-gold" style="width:100%" onclick="location.href='${link("search-results.html")}?destination=${d.name}'">Explore trips \u2192</button><button class="btn btn-outline" style="width:100%;margin-top:10px" data-fav="${d.id}">\u2661 Save to favourites</button></aside></div></div></main>`);
+    }
+    function tripRow(t) {
+      return `<article class="booking-row"><a href="${link("trip-details.html")}?id=${t.id}">${image(t.image, t.title, 400)}</a><div><a href="${link("trip-details.html")}?id=${t.id}"><strong>${t.title}</strong></a><div class="muted">${t.duration} days \xB7 from $${t.price.toLocaleString()}</div></div><a class="btn btn-outline row-action" href="${link("trip-details.html")}?id=${t.id}">View trip \u2192</a></article>`;
+    }
+    function searchPage() {
+      const params = new URLSearchParams(location.search), term = (params.get("destination") || "").toLowerCase(), matched = destinations.filter((d) => !term || d.name.toLowerCase().includes(term) || d.country.toLowerCase().includes(term)), tripList = trips.filter((t) => matched.some((d) => d.id === t.destinationId));
+      shell(`<main class="container"><div class="page-head"><span class="eyebrow">Your next chapter</span><h1 class="section-title">${term ? "Journeys for " + esc2(params.get("destination")) : "Experiences"}</h1><p class="muted">${tripList.length} considered journeys \xB7 ${params.get("guests") || 2} travellers</p></div><div class="filters"><select id="duration-filter"><option value="0">Any duration</option><option value="5">5+ days</option><option value="7">7+ days</option></select><select id="price-filter"><option value="0">Any price</option><option value="1800">Under $1,800</option><option value="2400">Under $2,400</option></select><select id="trip-sort"><option value="popular">Recommended</option><option value="low">Price: low to high</option></select></div><div id="trip-results">${tripList.length ? tripList.map(tripRow).join("") : `<div class="empty"><h3>No journeys match this search</h3><p class="muted">Explore all destinations to find your fit.</p><a class="btn btn-gold" href="${link("destinations.html")}">Browse destinations</a></div>`}</div></main>`);
+      const apply = () => {
+        let a = tripList.filter((t) => (!Number($("#duration-filter").value) || t.duration >= Number($("#duration-filter").value)) && (!Number($("#price-filter").value) || t.price <= Number($("#price-filter").value)));
+        if ($("#trip-sort").value === "low") a.sort((x, y) => x.price - y.price);
+        $("#trip-results").innerHTML = a.length ? a.map(tripRow).join("") : '<div class="empty">No trips match those filters.</div>';
+      };
+      $$2("#duration-filter,#price-filter,#trip-sort").forEach((el) => el.addEventListener("change", apply));
+    }
+    function tripPage() {
+      const t = trips.find((x) => x.id === new URLSearchParams(location.search).get("id")) || trips[0], d = destinations.find((x) => x.id === t.destinationId);
+      shell(`<main class="container"><div class="page-head"><span class="eyebrow">${d.name} \xB7 ${t.duration} days</span><h1 class="section-title">${t.title}</h1><p class="muted">A carefully considered journey in ${d.country}.</p></div><div class="two-col"><div><div class="gallery">${[t.image, d.image, "photo-1500530855697-b586d89ba3ee"].map((im, i) => image(im, `${t.title} scene ${i + 1}`, 900)).join("")}</div><h2 class="section-title" style="font-size:2rem;margin-top:30px">The journey</h2><p class="muted">${d.description}</p><h3>Day by day</h3><ol class="itinerary">${t.itinerary.map((x) => `<li>${x}</li>`).join("")}</ol><div class="two-col"><div><h3>Included</h3><ul class="check-list">${t.included.map((x) => `<li>${x}</li>`).join("")}</ul></div><div><h3>Not included</h3><ul>${t.excluded.map((x) => `<li>${x}</li>`).join("")}</ul></div></div></div><aside class="panel"><span class="eyebrow">A journey to remember</span><h2 class="section-title" style="font-size:2rem">From $${t.price.toLocaleString()}</h2><p class="muted">per person \xB7 ${t.dates}</p><label>Preferred travel date<input class="form-control" type="date" id="travel-date" min="${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}" style="width:100%;margin:8px 0"></label><label>Guests<select class="form-control" id="guest-count" style="width:100%;margin:8px 0"><option>2</option><option>1</option><option>3</option><option>4</option><option>5</option></select></label><button class="btn btn-gold" id="reserve-trip" style="width:100%;margin-top:14px">Reserve this journey \u2192</button><p class="muted" style="font-size:.8rem;text-align:center">No payment is taken in this demo.</p><p>\u2605 ${d.rating} \xB7 ${d.reviews} reviews</p></aside></div></main>`);
+      $("#reserve-trip").addEventListener("click", () => {
+        const q = new URLSearchParams({ trip: t.id, guests: $("#guest-count").value });
+        if ($("#travel-date").value) q.set("date", $("#travel-date").value);
+        location.href = link("checkout.html") + "?" + q;
+      });
+    }
+    function authPage(register = false) {
+      const title = register ? "Create your account" : "Welcome back";
+      shell(`<main class="form-page auth-page"><section class="form-photo" aria-hidden="true"><div class="auth-photo-copy"><span>TRAVELX PRIVATE</span><strong>Travel begins<br>with a feeling.</strong><small>Made for the way you want to feel.</small></div></section><div class="form-wrap"><form class="form-box" id="auth-form"><div class="auth-card-head"><span class="eyebrow">${register ? "YOUR TRAVELX ACCOUNT" : "WELCOME TO TRAVELX"}</span><span>01</span></div><h1>${title}</h1><p class="muted">${register ? "Start planning journeys that feel like yours." : "Sign in to continue your journey."}</p><p id="auth-error" class="muted" role="alert" aria-live="polite" hidden></p>${register ? `<label>Full name<input class="form-control" name="name" required autocomplete="name" placeholder="Your full name"></label>` : ""}<label>Email address<input class="form-control" name="email" type="email" required autocomplete="email" placeholder="you@example.com"></label><label>Password<div class="password-wrap"><input class="form-control" name="password" type="password" required minlength="${register ? 8 : 1}" autocomplete="${register ? "new-password" : "current-password"}" placeholder="${register ? "At least 8 characters" : "Your password"}"><button type="button" class="show-password">Show</button></div></label>${register ? `<label>Confirm password<input class="form-control" name="confirm" type="password" required placeholder="Repeat your password"></label>` : `<div class="auth-options"><label><input name="remember" type="checkbox"> Remember me</label><a class="muted" href="${link("forgot-password.html")}" id="forgot">Forgot password?</a></div>`}<button class="btn btn-gold" type="submit">${register ? "Create account" : "Log in"} <span>\u2197</span></button><p class="auth-switch muted">${register ? "Already have an account?" : "New to TravelX?"} <a href="${link(register ? "login.html" : "register.html")}">${register ? "Log in" : "Create an account"}</a></p></form></div></main>`);
+      const form = $("#auth-form");
+      const errorMessage = $("#auth-error");
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        errorMessage.hidden = true;
+        const formData = new FormData(form);
+        if (register && formData.get("password") !== formData.get("confirm")) {
+          errorMessage.textContent = "Passwords do not match.";
+          errorMessage.hidden = false;
+          return;
         }
-        function checkoutPage() {
-          const t = trips.find((x) => x.id === new URLSearchParams(location.search).get("trip")) || trips[0], d = destinations.find((x) => x.id === t.destinationId), u = activeUser(), params = new URLSearchParams(location.search), count = Number(params.get("guests")) || 2;
-          const calc = () => {
-            const n = Number($("#checkout-guests").value) || 1, sub = t.price * n, tax = Math.round(sub * 0.08), discount = $("#coupon-code").value.trim().toUpperCase() === "TRAVELX10" ? Math.round(sub * 0.1) : 0;
-            $("#subtotal").textContent = "$" + sub.toLocaleString();
-            $("#tax").textContent = "$" + tax.toLocaleString();
-            $("#discount").textContent = "\u2212$" + discount.toLocaleString();
-            $("#total").textContent = "$" + (sub + tax - discount).toLocaleString();
-          };
-          shell(`<main class="container"><div class="page-head"><span class="eyebrow">One step closer</span><h1 class="section-title">Review your journey</h1><p class="muted">Your booking is a simulated demo; no real payment will be collected.</p></div><form id="checkout-form" class="detail-layout"><div><section class="panel"><h2 class="section-title" style="font-size:1.8rem">Traveller details</h2><label>Full name<input class="form-control" name="name" required value="${esc2(u?.name || "")}"></label><label>Email<input class="form-control" name="email" type="email" required value="${esc2(u?.email || "")}" readonly></label><label>Phone<input class="form-control" name="phone" type="tel" required value="${esc2(u?.phone || "")}" placeholder="+1 555 0100"></label><label>Travel date<input class="form-control" name="date" type="date" min="${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}" value="${esc2(params.get("date") || "")}" required></label><label>Number of guests<select class="form-control" id="checkout-guests" name="guests"><option ${count === 1 ? "selected" : ""}>1</option><option ${count === 2 ? "selected" : ""}>2</option><option ${count === 3 ? "selected" : ""}>3</option><option ${count === 4 ? "selected" : ""}>4</option><option ${count === 5 ? "selected" : ""}>5</option></select></label><label>Coupon code<input class="form-control" id="coupon-code" placeholder="Try TRAVELX10"></label><p class="muted">Use <b>TRAVELX10</b> for 10% off this demo booking.</p></section></div><aside><section class="panel"><div class="booking-row" style="grid-template-columns:90px 1fr">${image(t.image, t.title, 400)}<div><strong>${t.title}</strong><div class="muted">${d.name} \xB7 ${t.duration} days</div></div></div><h3>Price summary</h3><p>Subtotal <b style="float:right" id="subtotal"></b></p><p>Taxes (8%) <b style="float:right" id="tax"></b></p><p>Discount <b style="float:right" id="discount"></b></p><hr><p>Total <b style="float:right;font-size:1.25rem" id="total"></b></p><p id="checkout-status" class="form-feedback" role="status" aria-live="polite"></p><button id="checkout-submit" class="btn btn-gold" style="width:100%">Confirm demo booking \u2192</button><p class="muted" style="font-size:.78rem">This frontend demo does not process payment.</p></section></aside></form></main>`);
-          $("#checkout-guests").addEventListener("change", calc);
-          $("#coupon-code").addEventListener("input", calc);
-          calc();
-          $("#checkout-form").addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const form = e.currentTarget, status = $("#checkout-status"), button = $("#checkout-submit"), fields = new FormData(form);
-            button.disabled = true;
-            formFeedback(status, "Saving your booking\u2026", "neutral");
-            try {
-              const booking = await createBooking({ tripId: t.id, date: String(fields.get("date")), guests: Number(fields.get("guests")), traveller: String(fields.get("name")).trim(), phone: String(fields.get("phone")).trim(), couponCode: $("#coupon-code").value });
-              formFeedback(status, "Booking saved. Opening your confirmation\u2026");
-              location.href = link("confirmation.html") + "?ref=" + encodeURIComponent(booking.ref);
-            } catch (error61) {
-              formFeedback(status, error61.message, "error");
-              button.disabled = false;
-            }
-          });
+        const submitButton = form.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        try {
+          const result = await authenticate(formData, register);
+          if (result.verificationRequired) {
+            errorMessage.textContent = "Account created. Verify your email, then sign in.";
+            errorMessage.hidden = false;
+            return;
+          }
+          location.href = link("dashboard.html");
+        } catch (error61) {
+          errorMessage.textContent = error61.message || "Authentication failed. Please try again.";
+          errorMessage.hidden = false;
+        } finally {
+          submitButton.disabled = false;
         }
-        function confirmationPage() {
-          const b = read().bookings.find((x) => x.ref === new URLSearchParams(location.search).get("ref")) || read().bookings.at(-1), t = trips.find((x) => x.id === b?.tripId) || trips[0], d = destinations.find((x) => x.id === t.destinationId);
-          shell(`<main class="container content-section"><section class="panel" id="confirmation" style="max-width:760px;margin:auto;text-align:center;padding:50px"><span class="eyebrow">It\u2019s official</span><h1 class="section-title">Your journey awaits.</h1><p class="form-feedback is-success" role="status">Your booking was saved to your account.</p><div style="text-align:left;background:var(--ivory);padding:24px;margin:28px 0"><p>Booking reference <strong>${esc2(b?.ref || "\u2014")}</strong></p><p>Journey <strong>${t.title} \xB7 ${d.name}</strong></p><p>Travel date <strong>${esc2(b?.date || "\u2014")}</strong></p><p>Guests <strong>${b?.guests || "\u2014"}</strong></p><p>Total <strong>$${(b?.total || 0).toLocaleString()}</strong></p></div><a class="btn btn-gold" href="${link("dashboard.html")}">Back to dashboard \u2192</a> <button class="btn btn-outline" id="print-confirm">Print confirmation</button></section></main>`);
-          $("#print-confirm").addEventListener("click", () => window.print());
+      });
+      $(".show-password").addEventListener("click", (event) => {
+        const input2 = $('[name="password"]');
+        input2.type = input2.type === "password" ? "text" : "password";
+        event.currentTarget.textContent = input2.type === "password" ? "Show" : "Hide";
+      });
+    }
+    function forgotPasswordPage() {
+      shell(`<main class="form-page auth-page"><section class="form-photo" aria-hidden="true"><div class="auth-photo-copy"><span>TRAVELX ACCOUNT</span><strong>A fresh start<br>is one email away.</strong><small>We\u2019ll send you a secure password reset link.</small></div></section><div class="form-wrap"><form class="form-box" id="forgot-form"><div class="auth-card-head"><span class="eyebrow">ACCOUNT RECOVERY</span><span>01</span></div><h1>Reset your password</h1><p class="muted">Enter the email address linked to your TravelX account.</p><p id="forgot-message" class="form-feedback" role="status" aria-live="polite" hidden></p><label>Email address<input class="form-control" name="email" type="email" required autocomplete="email" placeholder="you@example.com"></label><button class="btn btn-gold" type="submit">Send reset link <span>\u2197</span></button><p class="auth-switch muted"><a href="${link("login.html")}">Back to log in</a></p></form></div></main>`);
+      initAuthPageBackground();
+      const form = $("#forgot-form"), message = $("#forgot-message");
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = form.querySelector('button[type="submit"]');
+        button.disabled = true;
+        formFeedback(message, "Sending reset link\u2026", "neutral");
+        message.hidden = false;
+        try {
+          await sendPasswordReset(new FormData(form).get("email"));
+          formFeedback(message, "If an account exists for this email, a password reset link is on its way.");
+          form.reset();
+        } catch (error61) {
+          formFeedback(message, error61.message, "error");
+        } finally {
+          button.disabled = false;
         }
-        function bookingRowsWithEditor(bookings) {
-          const minDate = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-          return bookings.map((booking) => {
-            const trip = trips.find((item) => item.id === booking.tripId) || trips[0];
-            const destination = destinations.find((item) => item.id === trip.destinationId);
-            const cancelled = booking.status === "Cancelled";
-            const editable = booking.status === "Upcoming";
-            const archived = cancelled || booking.status === "Completed";
-            return `
+      });
+    }
+    function resetPasswordPage() {
+      const token = new URLSearchParams(location.search).get("token");
+      shell(`<main class="form-page auth-page"><section class="form-photo" aria-hidden="true"><div class="auth-photo-copy"><span>TRAVELX ACCOUNT</span><strong>Choose a new<br>password.</strong><small>Your new password keeps your journeys secure.</small></div></section><div class="form-wrap"><form class="form-box" id="reset-form"><div class="auth-card-head"><span class="eyebrow">SECURE YOUR ACCOUNT</span><span>02</span></div><h1>Set a new password</h1><p class="muted">Choose a password with at least 8 characters.</p><p id="reset-message" class="form-feedback" role="alert" aria-live="polite" ${token ? "hidden" : ""}>This reset link is missing or invalid. Request a new one.</p><label>New password<input class="form-control" name="password" type="password" required minlength="8" autocomplete="new-password"></label><label>Confirm new password<input class="form-control" name="confirm" type="password" required minlength="8" autocomplete="new-password"></label><button class="btn btn-gold" type="submit" ${token ? "" : "disabled"}>Update password <span>\u2197</span></button><p class="auth-switch muted"><a href="${link("login.html")}">Back to log in</a></p></form></div></main>`);
+      initAuthPageBackground();
+      const form = $("#reset-form"), message = $("#reset-message");
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!token) return;
+        if (form.elements.password.value !== form.elements.confirm.value) {
+          formFeedback(message, "The passwords do not match.", "error");
+          message.hidden = false;
+          return;
+        }
+        const button = form.querySelector('button[type="submit"]');
+        button.disabled = true;
+        formFeedback(message, "Updating your password\u2026", "neutral");
+        message.hidden = false;
+        try {
+          await completePasswordReset(token, form.elements.password.value);
+          formFeedback(message, "Your password has been updated. You can now log in.");
+          form.reset();
+        } catch (error61) {
+          formFeedback(message, error61.message, "error");
+        } finally {
+          button.disabled = false;
+        }
+      });
+    }
+    function currentGuard() {
+      if (!window.__TRAVELX_AUTHENTICATED__) {
+        location.href = link("login.html");
+        return false;
+      }
+      return true;
+    }
+    function checkoutPage() {
+      const t = trips.find((x) => x.id === new URLSearchParams(location.search).get("trip")) || trips[0], d = destinations.find((x) => x.id === t.destinationId), u = activeUser(), params = new URLSearchParams(location.search), count = Number(params.get("guests")) || 2;
+      const calc = () => {
+        const n = Number($("#checkout-guests").value) || 1, sub = t.price * n, tax = Math.round(sub * 0.08), discount = $("#coupon-code").value.trim().toUpperCase() === "TRAVELX10" ? Math.round(sub * 0.1) : 0;
+        $("#subtotal").textContent = "$" + sub.toLocaleString();
+        $("#tax").textContent = "$" + tax.toLocaleString();
+        $("#discount").textContent = "\u2212$" + discount.toLocaleString();
+        $("#total").textContent = "$" + (sub + tax - discount).toLocaleString();
+      };
+      shell(`<main class="container"><div class="page-head"><span class="eyebrow">One step closer</span><h1 class="section-title">Review your journey</h1><p class="muted">Your booking is a simulated demo; no real payment will be collected.</p></div><form id="checkout-form" class="detail-layout"><div><section class="panel"><h2 class="section-title" style="font-size:1.8rem">Traveller details</h2><label>Full name<input class="form-control" name="name" required value="${esc2(u?.name || "")}"></label><label>Email<input class="form-control" name="email" type="email" required value="${esc2(u?.email || "")}" readonly></label><label>Phone<input class="form-control" name="phone" type="tel" required value="${esc2(u?.phone || "")}" placeholder="+1 555 0100"></label><label>Travel date<input class="form-control" name="date" type="date" min="${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}" value="${esc2(params.get("date") || "")}" required></label><label>Number of guests<select class="form-control" id="checkout-guests" name="guests"><option ${count === 1 ? "selected" : ""}>1</option><option ${count === 2 ? "selected" : ""}>2</option><option ${count === 3 ? "selected" : ""}>3</option><option ${count === 4 ? "selected" : ""}>4</option><option ${count === 5 ? "selected" : ""}>5</option></select></label><label>Coupon code<input class="form-control" id="coupon-code" placeholder="Try TRAVELX10"></label><p class="muted">Use <b>TRAVELX10</b> for 10% off this demo booking.</p></section></div><aside><section class="panel"><div class="booking-row" style="grid-template-columns:90px 1fr">${image(t.image, t.title, 400)}<div><strong>${t.title}</strong><div class="muted">${d.name} \xB7 ${t.duration} days</div></div></div><h3>Price summary</h3><p>Subtotal <b style="float:right" id="subtotal"></b></p><p>Taxes (8%) <b style="float:right" id="tax"></b></p><p>Discount <b style="float:right" id="discount"></b></p><hr><p>Total <b style="float:right;font-size:1.25rem" id="total"></b></p><p id="checkout-status" class="form-feedback" role="status" aria-live="polite"></p><button id="checkout-submit" class="btn btn-gold" style="width:100%">Confirm demo booking \u2192</button><p class="muted" style="font-size:.78rem">This frontend demo does not process payment.</p></section></aside></form></main>`);
+      $("#checkout-guests").addEventListener("change", calc);
+      $("#coupon-code").addEventListener("input", calc);
+      calc();
+      $("#checkout-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const form = e.currentTarget, status = $("#checkout-status"), button = $("#checkout-submit"), fields = new FormData(form);
+        button.disabled = true;
+        formFeedback(status, "Saving your booking\u2026", "neutral");
+        try {
+          const booking = await createBooking({ tripId: t.id, date: String(fields.get("date")), guests: Number(fields.get("guests")), traveller: String(fields.get("name")).trim(), phone: String(fields.get("phone")).trim(), couponCode: $("#coupon-code").value });
+          formFeedback(status, "Booking saved. Opening your confirmation\u2026");
+          location.href = link("confirmation.html") + "?ref=" + encodeURIComponent(booking.ref);
+        } catch (error61) {
+          formFeedback(status, error61.message, "error");
+          button.disabled = false;
+        }
+      });
+    }
+    function confirmationPage() {
+      const b = read().bookings.find((x) => x.ref === new URLSearchParams(location.search).get("ref")) || read().bookings.at(-1), t = trips.find((x) => x.id === b?.tripId) || trips[0], d = destinations.find((x) => x.id === t.destinationId);
+      shell(`<main class="container content-section"><section class="panel" id="confirmation" style="max-width:760px;margin:auto;text-align:center;padding:50px"><span class="eyebrow">It\u2019s official</span><h1 class="section-title">Your journey awaits.</h1><p class="form-feedback is-success" role="status">Your booking was saved to your account.</p><div style="text-align:left;background:var(--ivory);padding:24px;margin:28px 0"><p>Booking reference <strong>${esc2(b?.ref || "\u2014")}</strong></p><p>Journey <strong>${t.title} \xB7 ${d.name}</strong></p><p>Travel date <strong>${esc2(b?.date || "\u2014")}</strong></p><p>Guests <strong>${b?.guests || "\u2014"}</strong></p><p>Total <strong>$${(b?.total || 0).toLocaleString()}</strong></p></div><a class="btn btn-gold" href="${link("dashboard.html")}">Back to dashboard \u2192</a> <button class="btn btn-outline" id="print-confirm">Print confirmation</button></section></main>`);
+      $("#print-confirm").addEventListener("click", () => window.print());
+    }
+    function bookingRowsWithEditor(bookings) {
+      const minDate = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+      return bookings.map((booking) => {
+        const trip = trips.find((item) => item.id === booking.tripId) || trips[0];
+        const destination = destinations.find((item) => item.id === trip.destinationId);
+        const cancelled = booking.status === "Cancelled";
+        const editable = booking.status === "Upcoming";
+        const archived = cancelled || booking.status === "Completed";
+        return `
            <article class="booking-row">
                ${image(trip.image, trip.title, 300)}
                <div>
@@ -30288,12 +30051,12 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
                ` : ""}
            </article>
        `;
-          }).join("");
-        }
-        function editableBookingsPage() {
-          if (!currentGuard()) return;
-          const initial = read().bookings;
-          shell(`<main class="dashboard account-dashboard">${dashNav("bookings.html")}
+      }).join("");
+    }
+    function editableBookingsPage() {
+      if (!currentGuard()) return;
+      const initial = read().bookings;
+      shell(`<main class="dashboard account-dashboard">${dashNav("bookings.html")}
        <section class="dash-main profile-main">
            <div class="account-main-top">
                <span class="eyebrow">YOUR TRAVELX ACCOUNT</span>
@@ -30312,168 +30075,168 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
            <div id="booking-list" aria-live="polite"></div>
        </section>
    </main>`);
-          const list = $("#booking-list");
-          const render = (bookings, error61 = "") => {
-            if (error61) {
-              list.innerHTML = `<div class="empty"><h3>Could not refresh bookings</h3><p class="muted">${esc2(error61)}</p><button type="button" class="btn btn-outline" id="retry-bookings">Try again</button></div>`;
-              $("#retry-bookings")?.addEventListener("click", load);
-              return;
-            }
-            const filter = $("#booking-filter").value;
-            const filtered = bookings.filter((booking) => filter === "all" || booking.status === filter);
-            list.innerHTML = filtered.length ? bookingRowsWithEditor(filtered) : `<div class="empty"><h3>${bookings.length ? "No bookings in this category." : "No bookings yet"}</h3>
+      const list = $("#booking-list");
+      const render = (bookings, error61 = "") => {
+        if (error61) {
+          list.innerHTML = `<div class="empty"><h3>Could not refresh bookings</h3><p class="muted">${esc2(error61)}</p><button type="button" class="btn btn-outline" id="retry-bookings">Try again</button></div>`;
+          $("#retry-bookings")?.addEventListener("click", load);
+          return;
+        }
+        const filter = $("#booking-filter").value;
+        const filtered = bookings.filter((booking) => filter === "all" || booking.status === filter);
+        list.innerHTML = filtered.length ? bookingRowsWithEditor(filtered) : `<div class="empty"><h3>${bookings.length ? "No bookings in this category." : "No bookings yet"}</h3>
                ${bookings.length ? "" : `<p class="muted">Your next story is waiting to be written.</p><a class="btn btn-gold" href="${link("destinations.html")}">Explore destinations</a>`}
            </div>`;
+        bindCancels();
+        bindDeleteButtons();
+        bindBookingEditors();
+      };
+      const load = async () => {
+        list.innerHTML = '<p class="muted">Loading your bookings\u2026</p>';
+        try {
+          const snapshot = await refreshAccountSnapshot();
+          render(snapshot.bookings || []);
+        } catch (error61) {
+          render(initial, error61.message);
+        }
+      };
+      $("#booking-filter").addEventListener("change", () => render(read().bookings));
+      load();
+    }
+    function bindBookingEditors() {
+      $$2(".edit-booking").forEach((button) => {
+        button.addEventListener("click", () => {
+          const panel = button.closest(".booking-row")?.querySelector(".booking-edit-panel");
+          if (!panel) return;
+          const willOpen = panel.hidden;
+          $$2(".booking-edit-panel").forEach((item) => {
+            item.hidden = true;
+          });
+          $$2(".edit-booking").forEach((item) => item.setAttribute("aria-expanded", "false"));
+          panel.hidden = !willOpen;
+          button.setAttribute("aria-expanded", String(willOpen));
+        });
+      });
+      $$2(".close-booking-edit").forEach((button) => {
+        button.addEventListener("click", () => {
+          const row = button.closest(".booking-row");
+          const panel = row?.querySelector(".booking-edit-panel");
+          if (panel) panel.hidden = true;
+          row?.querySelector(".edit-booking")?.setAttribute("aria-expanded", "false");
+        });
+      });
+      $$2(".booking-edit-form").forEach((form) => {
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const submit = form.querySelector('[type="submit"]');
+          const fields = new FormData(form);
+          submit.disabled = true;
+          try {
+            await updateBooking(form.dataset.ref, {
+              date: String(fields.get("date")),
+              guests: Number(fields.get("guests")),
+              traveller: String(fields.get("traveller")).trim(),
+              phone: String(fields.get("phone")).trim()
+            });
+            toast2("Booking updated successfully.");
+            const currentFilter = $("#booking-filter").value;
+            const refreshed = read().bookings.filter((booking) => currentFilter === "all" || booking.status === currentFilter);
+            $("#booking-list").innerHTML = refreshed.length ? bookingRowsWithEditor(refreshed) : '<div class="empty">No bookings in this category.</div>';
             bindCancels();
             bindDeleteButtons();
             bindBookingEditors();
-          };
-          const load = async () => {
-            list.innerHTML = '<p class="muted">Loading your bookings\u2026</p>';
-            try {
-              const snapshot = await refreshAccountSnapshot();
-              render(snapshot.bookings || []);
-            } catch (error61) {
-              render(initial, error61.message);
-            }
-          };
-          $("#booking-filter").addEventListener("change", () => render(read().bookings));
-          load();
+          } catch (error61) {
+            submit.disabled = false;
+            toast2(error61.message, "error");
+          }
+        });
+      });
+    }
+    function dashNav(active) {
+      const u = activeUser();
+      const items = [["dashboard.html", "Overview"], ["bookings.html", "My bookings"], ["favorites.html", "Favourites"], ["journeys.html", "Travel globe"], ["profile.html", "Profile & settings"]];
+      return `<nav class="side-nav"><a class="account-brand" href="${link("index.html")}" aria-label="TravelX home">${brandMarkup()}</a><a class="account-identity" href="${link("profile.html")}"><img class="account-avatar" src="${esc2(avatarSource(u?.avatar))}" alt=""><span><strong>${esc2(u?.name || "My account")}</strong><small>Account settings</small></span></a><div class="side-nav-links">${items.map(([page2, label]) => `<a class="${active === page2 ? "active" : ""}" href="${link(page2)}">${label}</a>`).join("")}</div><a href="#" class="logout side-logout">Log out <span aria-hidden="true">\u2197</span></a></nav>`;
+    }
+    function dashboardPage() {
+      if (!currentGuard()) return;
+      const u = activeUser(), d = read(), mine = d.bookings, upcoming = mine.filter((b) => b.status === "Upcoming").sort((a, b) => String(a.date).localeCompare(String(b.date))), done = mine.filter((b) => b.status === "Completed"), next = upcoming[0], nextTrip = trips.find((t) => t.id === next?.tripId), nextDestination = destinations.find((x) => x.id === nextTrip?.destinationId), recent = mine.slice(0, 3), firstName = String(u.name || "traveller").trim().split(/\s+/)[0];
+      shell(`<main class="dashboard account-dashboard">${dashNav("dashboard.html")}<section class="dash-main overview-main"><div class="account-main-top"><span class="eyebrow">YOUR TRAVELX ACCOUNT</span><button class="icon-btn theme-toggle" aria-label="Toggle light and dark theme" title="Toggle theme">\u263C</button></div><header class="overview-heading"><div><span class="eyebrow">YOUR JOURNEYS, AT A GLANCE</span><h1 class="section-title">Welcome back, ${esc2(firstName)}.</h1><p class="muted">A little space to plan what\u2019s next and revisit what you\u2019ve loved.</p></div><a class="btn btn-gold overview-explore" href="${link("destinations.html")}">Explore journeys <span>\u2197</span></a></header><section class="overview-stat-grid" aria-label="Travel account summary"><article class="overview-stat"><span class="overview-stat-icon">\u2733</span><span class="muted">All bookings</span><strong>${mine.length}</strong><small>Across your journeys</small></article><article class="overview-stat"><span class="overview-stat-icon">\u2197</span><span class="muted">Upcoming</span><strong>${upcoming.length}</strong><small>Journeys ahead</small></article><article class="overview-stat"><span class="overview-stat-icon">\u2726</span><span class="muted">Completed</span><strong>${done.length}</strong><small>Stories collected</small></article><article class="overview-stat"><span class="overview-stat-icon">\u2661</span><span class="muted">Saved places</span><strong>${d.favorites.length}</strong><small>Waiting for you</small></article></section><div class="overview-content-grid"><section class="overview-next-card"><div class="overview-section-heading"><div><span class="eyebrow">UP NEXT</span><h2>Your next journey</h2></div><a class="text-button" href="${link("bookings.html")}">All bookings <span>\u2197</span></a></div>${next && nextTrip && nextDestination ? `<article class="next-journey"><div class="next-journey-image">${image(nextTrip.image, nextTrip.title, 800)}<span class="next-journey-badge">${esc2(next.status)}</span></div><div class="next-journey-content"><span class="muted">${esc2(nextDestination.country)} \xB7 ${nextTrip.duration} days</span><h3>${esc2(nextTrip.title)}</h3><p>${esc2(next.date)} <span>\xB7</span> ${next.guests} ${Number(next.guests) === 1 ? "traveller" : "travellers"}</p><div class="next-journey-footer"><strong>$${Number(next.total).toLocaleString()}</strong><a class="btn btn-outline" href="${link("bookings.html")}">View details</a></div></div></article>` : `<div class="overview-empty"><span class="overview-empty-icon">\u2197</span><h3>Your next story starts somewhere.</h3><p class="muted">Browse considered journeys and find the one that feels like yours.</p><a class="btn btn-forest" href="${link("destinations.html")}">Discover destinations</a></div>`}</section><aside class="overview-side-stack"><section class="overview-shortcuts"><span class="eyebrow">QUICK LINKS</span><h2>Make it yours.</h2><a href="${link("favorites.html")}"><span class="shortcut-icon">\u2661</span><span><strong>Favourite places</strong><small>Return to the places you saved</small></span><i>\u2197</i></a><a href="${link("bookings.html")}"><span class="shortcut-icon">\u25A4</span><span><strong>Booking history</strong><small>See dates and trip details</small></span><i>\u2197</i></a><a href="${link("profile.html")}"><span class="shortcut-icon">\u25CB</span><span><strong>Profile & settings</strong><small>Update your personal details</small></span><i>\u2197</i></a></section><div class="overview-note"><span>\u2726</span><p>Travel thoughtfully.<br><strong>Make every journey your own.</strong></p></div></aside></div><section class="overview-recent"><div class="overview-section-heading"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>Your bookings</h2></div><a class="text-button" href="${link("bookings.html")}">View all <span>\u2197</span></a></div>${recent.length ? `<div class="overview-booking-list">${bookingRows(recent)}</div>` : `<div class="overview-no-bookings"><span>No bookings yet</span><p class="muted">Your bookings will appear here once you plan your first journey.</p></div>`}</section></section></main>`);
+      refreshAccountSnapshot().then((snapshot) => {
+        const bookings = snapshot.bookings || [];
+        const upcoming2 = bookings.filter((b) => b.status === "Upcoming").sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        const completed = bookings.filter((b) => b.status === "Completed");
+        const setText = (selector, value) => {
+          const node2 = $(selector);
+          if (node2) node2.textContent = String(value);
+        };
+        setText(".overview-stat:nth-child(1) strong", bookings.length);
+        setText(".overview-stat:nth-child(2) strong", upcoming2.length);
+        setText(".overview-stat:nth-child(3) strong", completed.length);
+        const recent2 = bookings.slice(0, 3), recentNode = $(".overview-booking-list"), emptyNode = $(".overview-no-bookings");
+        if (recent2.length) {
+          if (recentNode) recentNode.innerHTML = bookingRows(recent2);
+          else if (emptyNode) emptyNode.outerHTML = '<div class="overview-booking-list">' + bookingRows(recent2) + "</div>";
         }
-        function bindBookingEditors() {
-          $$2(".edit-booking").forEach((button) => {
-            button.addEventListener("click", () => {
-              const panel = button.closest(".booking-row")?.querySelector(".booking-edit-panel");
-              if (!panel) return;
-              const willOpen = panel.hidden;
-              $$2(".booking-edit-panel").forEach((item) => {
-                item.hidden = true;
-              });
-              $$2(".edit-booking").forEach((item) => item.setAttribute("aria-expanded", "false"));
-              panel.hidden = !willOpen;
-              button.setAttribute("aria-expanded", String(willOpen));
-            });
-          });
-          $$2(".close-booking-edit").forEach((button) => {
-            button.addEventListener("click", () => {
-              const row = button.closest(".booking-row");
-              const panel = row?.querySelector(".booking-edit-panel");
-              if (panel) panel.hidden = true;
-              row?.querySelector(".edit-booking")?.setAttribute("aria-expanded", "false");
-            });
-          });
-          $$2(".booking-edit-form").forEach((form) => {
-            form.addEventListener("submit", async (event) => {
-              event.preventDefault();
-              const submit = form.querySelector('[type="submit"]');
-              const fields = new FormData(form);
-              submit.disabled = true;
-              try {
-                await updateBooking(form.dataset.ref, {
-                  date: String(fields.get("date")),
-                  guests: Number(fields.get("guests")),
-                  traveller: String(fields.get("traveller")).trim(),
-                  phone: String(fields.get("phone")).trim()
-                });
-                toast2("Booking updated successfully.");
-                const currentFilter = $("#booking-filter").value;
-                const refreshed = read().bookings.filter((booking) => currentFilter === "all" || booking.status === currentFilter);
-                $("#booking-list").innerHTML = refreshed.length ? bookingRowsWithEditor(refreshed) : '<div class="empty">No bookings in this category.</div>';
-                bindCancels();
-                bindDeleteButtons();
-                bindBookingEditors();
-              } catch (error61) {
-                submit.disabled = false;
-                toast2(error61.message, "error");
-              }
-            });
-          });
+        const next2 = upcoming2[0], trip = trips.find((t) => t.id === next2?.tripId), destination = destinations.find((item) => item.id === trip?.destinationId), emptyNext = $(".overview-empty");
+        if (next2 && trip && destination && emptyNext) emptyNext.outerHTML = '<article class="next-journey"><div class="next-journey-image">' + image(trip.image, trip.title, 800) + '<span class="next-journey-badge">' + esc2(next2.status) + '</span></div><div class="next-journey-content"><span class="muted">' + esc2(destination.country) + " \xB7 " + trip.duration + " days</span><h3>" + esc2(trip.title) + "</h3><p>" + esc2(next2.date) + " \xB7 " + next2.guests + ' guests</p><div class="next-journey-footer"><strong>$' + Number(next2.total).toLocaleString() + '</strong><a class="btn btn-outline" href="' + link("bookings.html") + '">View details</a></div></div></article>';
+      }).catch((error61) => toast2("Could not refresh bookings: " + error61.message, "error"));
+    }
+    function bookingRows(list) {
+      return list.map((b) => {
+        const t = trips.find((x) => x.id === b.tripId) || trips[0], d = destinations.find((x) => x.id === t.destinationId), cancelled = b.status === "Cancelled", archived = cancelled || b.status === "Completed";
+        return `<article class="booking-row">${image(t.image, t.title, 300)}<div><strong>${esc2(t.title)}</strong><div class="muted">${esc2(d.name)} \xB7 ${esc2(b.date || "Date not set")} \xB7 ${Number(b.guests) || 0} guests</div><span class="tag">${esc2(b.status)}</span></div><div class="row-action"><strong>$${Number(b.total || 0).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><br>${cancelled ? "" : `<button class="btn btn-outline cancel-booking" data-ref="${esc2(b.ref)}">Cancel booking</button>`}${archived ? `<button class="booking-delete" type="button" data-ref="${esc2(b.ref)}" aria-label="Delete booking" title="Delete booking">\u2672</button>` : ""}</div></article>`;
+      }).join("");
+    }
+    function bookingsPage() {
+      if (!currentGuard()) return;
+      const initial = read().bookings;
+      const draw = (bookings, error61 = "") => {
+        const mine = bookings;
+        const list = $("#booking-list");
+        if (!list) return;
+        list.innerHTML = error61 ? `<div class="empty"><h3>Could not refresh bookings</h3><p class="muted">${esc2(error61)}</p><button type="button" class="btn btn-outline" id="retry-bookings">Try again</button></div>` : mine.length ? bookingRows(mine) : `<div class="empty"><h3>No bookings yet</h3><p class="muted">Your next story is waiting to be written.</p><a class="btn btn-gold" href="${link("destinations.html")}">Explore destinations</a></div>`;
+        if (error61) $("#retry-bookings")?.addEventListener("click", load);
+        else {
+          bindCancels();
+          bindDeleteButtons();
         }
-        function dashNav(active) {
-          const u = activeUser();
-          const items = [["dashboard.html", "Overview"], ["bookings.html", "My bookings"], ["favorites.html", "Favourites"], ["journeys.html", "Travel globe"], ["profile.html", "Profile & settings"]];
-          return `<nav class="side-nav"><a class="account-brand" href="${link("index.html")}" aria-label="TravelX home">${brandMarkup()}</a><a class="account-identity" href="${link("profile.html")}"><img class="account-avatar" src="${esc2(avatarSource(u?.avatar))}" alt=""><span><strong>${esc2(u?.name || "My account")}</strong><small>Account settings</small></span></a><div class="side-nav-links">${items.map(([page2, label]) => `<a class="${active === page2 ? "active" : ""}" href="${link(page2)}">${label}</a>`).join("")}</div><a href="#" class="logout side-logout">Log out <span aria-hidden="true">\u2197</span></a></nav>`;
+      };
+      const load = async () => {
+        const list = $("#booking-list");
+        if (list) list.innerHTML = '<p class="muted">Loading your bookings\u2026</p>';
+        try {
+          const snapshot = await refreshAccountSnapshot();
+          draw(snapshot.bookings || []);
+        } catch (error61) {
+          draw(initial, error61.message);
         }
-        function dashboardPage() {
-          if (!currentGuard()) return;
-          const u = activeUser(), d = read(), mine = d.bookings, upcoming = mine.filter((b) => b.status === "Upcoming").sort((a, b) => String(a.date).localeCompare(String(b.date))), done = mine.filter((b) => b.status === "Completed"), next = upcoming[0], nextTrip = trips.find((t) => t.id === next?.tripId), nextDestination = destinations.find((x) => x.id === nextTrip?.destinationId), recent = mine.slice(0, 3), firstName = String(u.name || "traveller").trim().split(/\s+/)[0];
-          shell(`<main class="dashboard account-dashboard">${dashNav("dashboard.html")}<section class="dash-main overview-main"><div class="account-main-top"><span class="eyebrow">YOUR TRAVELX ACCOUNT</span><button class="icon-btn theme-toggle" aria-label="Toggle light and dark theme" title="Toggle theme">\u263C</button></div><header class="overview-heading"><div><span class="eyebrow">YOUR JOURNEYS, AT A GLANCE</span><h1 class="section-title">Welcome back, ${esc2(firstName)}.</h1><p class="muted">A little space to plan what\u2019s next and revisit what you\u2019ve loved.</p></div><a class="btn btn-gold overview-explore" href="${link("destinations.html")}">Explore journeys <span>\u2197</span></a></header><section class="overview-stat-grid" aria-label="Travel account summary"><article class="overview-stat"><span class="overview-stat-icon">\u2733</span><span class="muted">All bookings</span><strong>${mine.length}</strong><small>Across your journeys</small></article><article class="overview-stat"><span class="overview-stat-icon">\u2197</span><span class="muted">Upcoming</span><strong>${upcoming.length}</strong><small>Journeys ahead</small></article><article class="overview-stat"><span class="overview-stat-icon">\u2726</span><span class="muted">Completed</span><strong>${done.length}</strong><small>Stories collected</small></article><article class="overview-stat"><span class="overview-stat-icon">\u2661</span><span class="muted">Saved places</span><strong>${d.favorites.length}</strong><small>Waiting for you</small></article></section><div class="overview-content-grid"><section class="overview-next-card"><div class="overview-section-heading"><div><span class="eyebrow">UP NEXT</span><h2>Your next journey</h2></div><a class="text-button" href="${link("bookings.html")}">All bookings <span>\u2197</span></a></div>${next && nextTrip && nextDestination ? `<article class="next-journey"><div class="next-journey-image">${image(nextTrip.image, nextTrip.title, 800)}<span class="next-journey-badge">${esc2(next.status)}</span></div><div class="next-journey-content"><span class="muted">${esc2(nextDestination.country)} \xB7 ${nextTrip.duration} days</span><h3>${esc2(nextTrip.title)}</h3><p>${esc2(next.date)} <span>\xB7</span> ${next.guests} ${Number(next.guests) === 1 ? "traveller" : "travellers"}</p><div class="next-journey-footer"><strong>$${Number(next.total).toLocaleString()}</strong><a class="btn btn-outline" href="${link("bookings.html")}">View details</a></div></div></article>` : `<div class="overview-empty"><span class="overview-empty-icon">\u2197</span><h3>Your next story starts somewhere.</h3><p class="muted">Browse considered journeys and find the one that feels like yours.</p><a class="btn btn-forest" href="${link("destinations.html")}">Discover destinations</a></div>`}</section><aside class="overview-side-stack"><section class="overview-shortcuts"><span class="eyebrow">QUICK LINKS</span><h2>Make it yours.</h2><a href="${link("favorites.html")}"><span class="shortcut-icon">\u2661</span><span><strong>Favourite places</strong><small>Return to the places you saved</small></span><i>\u2197</i></a><a href="${link("bookings.html")}"><span class="shortcut-icon">\u25A4</span><span><strong>Booking history</strong><small>See dates and trip details</small></span><i>\u2197</i></a><a href="${link("profile.html")}"><span class="shortcut-icon">\u25CB</span><span><strong>Profile & settings</strong><small>Update your personal details</small></span><i>\u2197</i></a></section><div class="overview-note"><span>\u2726</span><p>Travel thoughtfully.<br><strong>Make every journey your own.</strong></p></div></aside></div><section class="overview-recent"><div class="overview-section-heading"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>Your bookings</h2></div><a class="text-button" href="${link("bookings.html")}">View all <span>\u2197</span></a></div>${recent.length ? `<div class="overview-booking-list">${bookingRows(recent)}</div>` : `<div class="overview-no-bookings"><span>No bookings yet</span><p class="muted">Your bookings will appear here once you plan your first journey.</p></div>`}</section></section></main>`);
-          refreshAccountSnapshot().then((snapshot) => {
-            const bookings = snapshot.bookings || [];
-            const upcoming2 = bookings.filter((b) => b.status === "Upcoming").sort((a, b) => String(a.date).localeCompare(String(b.date)));
-            const completed = bookings.filter((b) => b.status === "Completed");
-            const setText = (selector, value) => {
-              const node2 = $(selector);
-              if (node2) node2.textContent = String(value);
-            };
-            setText(".overview-stat:nth-child(1) strong", bookings.length);
-            setText(".overview-stat:nth-child(2) strong", upcoming2.length);
-            setText(".overview-stat:nth-child(3) strong", completed.length);
-            const recent2 = bookings.slice(0, 3), recentNode = $(".overview-booking-list"), emptyNode = $(".overview-no-bookings");
-            if (recent2.length) {
-              if (recentNode) recentNode.innerHTML = bookingRows(recent2);
-              else if (emptyNode) emptyNode.outerHTML = '<div class="overview-booking-list">' + bookingRows(recent2) + "</div>";
-            }
-            const next2 = upcoming2[0], trip = trips.find((t) => t.id === next2?.tripId), destination = destinations.find((item) => item.id === trip?.destinationId), emptyNext = $(".overview-empty");
-            if (next2 && trip && destination && emptyNext) emptyNext.outerHTML = '<article class="next-journey"><div class="next-journey-image">' + image(trip.image, trip.title, 800) + '<span class="next-journey-badge">' + esc2(next2.status) + '</span></div><div class="next-journey-content"><span class="muted">' + esc2(destination.country) + " \xB7 " + trip.duration + " days</span><h3>" + esc2(trip.title) + "</h3><p>" + esc2(next2.date) + " \xB7 " + next2.guests + ' guests</p><div class="next-journey-footer"><strong>$' + Number(next2.total).toLocaleString() + '</strong><a class="btn btn-outline" href="' + link("bookings.html") + '">View details</a></div></div></article>';
-          }).catch((error61) => toast2("Could not refresh bookings: " + error61.message, "error"));
-        }
-        function bookingRows(list) {
-          return list.map((b) => {
-            const t = trips.find((x) => x.id === b.tripId) || trips[0], d = destinations.find((x) => x.id === t.destinationId), cancelled = b.status === "Cancelled", archived = cancelled || b.status === "Completed";
-            return `<article class="booking-row">${image(t.image, t.title, 300)}<div><strong>${esc2(t.title)}</strong><div class="muted">${esc2(d.name)} \xB7 ${esc2(b.date || "Date not set")} \xB7 ${Number(b.guests) || 0} guests</div><span class="tag">${esc2(b.status)}</span></div><div class="row-action"><strong>$${Number(b.total || 0).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><br>${cancelled ? "" : `<button class="btn btn-outline cancel-booking" data-ref="${esc2(b.ref)}">Cancel booking</button>`}${archived ? `<button class="booking-delete" type="button" data-ref="${esc2(b.ref)}" aria-label="Delete booking" title="Delete booking">\u2672</button>` : ""}</div></article>`;
-          }).join("");
-        }
-        function bookingsPage2() {
-          if (!currentGuard()) return;
-          const initial = read().bookings;
-          const draw = (bookings, error61 = "") => {
-            const mine = bookings;
-            const list = $("#booking-list");
-            if (!list) return;
-            list.innerHTML = error61 ? `<div class="empty"><h3>Could not refresh bookings</h3><p class="muted">${esc2(error61)}</p><button type="button" class="btn btn-outline" id="retry-bookings">Try again</button></div>` : mine.length ? bookingRows(mine) : `<div class="empty"><h3>No bookings yet</h3><p class="muted">Your next story is waiting to be written.</p><a class="btn btn-gold" href="${link("destinations.html")}">Explore destinations</a></div>`;
-            if (error61) $("#retry-bookings")?.addEventListener("click", load);
-            else {
-              bindCancels();
-              bindDeleteButtons();
-            }
-          };
-          const load = async () => {
-            const list = $("#booking-list");
-            if (list) list.innerHTML = '<p class="muted">Loading your bookings\u2026</p>';
-            try {
-              const snapshot = await refreshAccountSnapshot();
-              draw(snapshot.bookings || []);
-            } catch (error61) {
-              draw(initial, error61.message);
-            }
-          };
-          shell(`<main class="dashboard account-dashboard">${dashNav("bookings.html")}<section class="dash-main profile-main"><div class="account-main-top"><span class="eyebrow">YOUR TRAVELX ACCOUNT</span><button class="icon-btn theme-toggle" aria-label="Toggle light and dark theme" title="Toggle theme">\u263C</button></div><span class="eyebrow">Every journey</span><h1 class="section-title">My bookings</h1><div class="filters"><select id="booking-filter"><option value="all">All bookings</option><option>Upcoming</option><option>Completed</option><option>Cancelled</option></select></div><div id="booking-list">${initial.length ? bookingRows(initial) : `<p class="muted">Loading your bookings\u2026</p>`}</div></section></main>`);
-          $("#booking-filter").addEventListener("change", () => {
-            const val = $("#booking-filter").value;
-            const list = read().bookings.filter((b) => val === "all" || b.status === val);
-            $("#booking-list").innerHTML = list.length ? bookingRows(list) : '<div class="empty">No bookings in this category.</div>';
-            bindCancels();
-            bindDeleteButtons();
-          });
-          load();
-        }
-        function favoritesPage() {
-          if (!currentGuard()) return;
-          const fav = read().favorites, list = destinations.filter((d) => fav.includes(d.id));
-          shell(`<main class="dashboard account-dashboard">${dashNav("favorites.html")}<section class="dash-main profile-main"><div class="account-main-top"><span class="eyebrow">YOUR TRAVELX ACCOUNT</span><button class="icon-btn theme-toggle" aria-label="Toggle light and dark theme" title="Toggle theme">\u263C</button></div><span class="eyebrow">Kept close</span><h1 class="section-title">Your favourites</h1><div class="grid">${list.length ? cards(list) : `<div class="empty" style="grid-column:1/-1"><h3>Your list is waiting</h3><p class="muted">Save the places that call to you.</p><a class="btn btn-gold" href="${link("destinations.html")}">Explore destinations</a></div>`}</div></section></main>`);
-        }
-        function ensureAvatarCropper() {
-          let cropper = $("#avatar-cropper");
-          if (cropper) return cropper;
-          cropper = document.createElement("section");
-          cropper.id = "avatar-cropper";
-          cropper.className = "avatar-cropper";
-          cropper.hidden = true;
-          cropper.setAttribute("role", "dialog");
-          cropper.setAttribute("aria-modal", "true");
-          cropper.setAttribute("aria-labelledby", "avatar-crop-title");
-          cropper.innerHTML = `
+      };
+      shell(`<main class="dashboard account-dashboard">${dashNav("bookings.html")}<section class="dash-main profile-main"><div class="account-main-top"><span class="eyebrow">YOUR TRAVELX ACCOUNT</span><button class="icon-btn theme-toggle" aria-label="Toggle light and dark theme" title="Toggle theme">\u263C</button></div><span class="eyebrow">Every journey</span><h1 class="section-title">My bookings</h1><div class="filters"><select id="booking-filter"><option value="all">All bookings</option><option>Upcoming</option><option>Completed</option><option>Cancelled</option></select></div><div id="booking-list">${initial.length ? bookingRows(initial) : `<p class="muted">Loading your bookings\u2026</p>`}</div></section></main>`);
+      $("#booking-filter").addEventListener("change", () => {
+        const val = $("#booking-filter").value;
+        const list = read().bookings.filter((b) => val === "all" || b.status === val);
+        $("#booking-list").innerHTML = list.length ? bookingRows(list) : '<div class="empty">No bookings in this category.</div>';
+        bindCancels();
+        bindDeleteButtons();
+      });
+      load();
+    }
+    function favoritesPage() {
+      if (!currentGuard()) return;
+      const fav = read().favorites, list = destinations.filter((d) => fav.includes(d.id));
+      shell(`<main class="dashboard account-dashboard">${dashNav("favorites.html")}<section class="dash-main profile-main"><div class="account-main-top"><span class="eyebrow">YOUR TRAVELX ACCOUNT</span><button class="icon-btn theme-toggle" aria-label="Toggle light and dark theme" title="Toggle theme">\u263C</button></div><span class="eyebrow">Kept close</span><h1 class="section-title">Your favourites</h1><div class="grid">${list.length ? cards(list) : `<div class="empty" style="grid-column:1/-1"><h3>Your list is waiting</h3><p class="muted">Save the places that call to you.</p><a class="btn btn-gold" href="${link("destinations.html")}">Explore destinations</a></div>`}</div></section></main>`);
+    }
+    function ensureAvatarCropper() {
+      let cropper = $("#avatar-cropper");
+      if (cropper) return cropper;
+      cropper = document.createElement("section");
+      cropper.id = "avatar-cropper";
+      cropper.className = "avatar-cropper";
+      cropper.hidden = true;
+      cropper.setAttribute("role", "dialog");
+      cropper.setAttribute("aria-modal", "true");
+      cropper.setAttribute("aria-labelledby", "avatar-crop-title");
+      cropper.innerHTML = `
         <div class="avatar-crop-dialog">
             <header class="avatar-crop-header">
                 <div><span class="eyebrow">PROFILE PHOTO</span><h2 id="avatar-crop-title">Crop your photo</h2></div>
@@ -30496,150 +30259,150 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
                 <button class="btn btn-gold" id="avatar-crop-use" type="button">Use this photo</button>
             </div>
         </div>`;
-          document.body.append(cropper);
-          return cropper;
-        }
-        function compressAvatar(file2) {
-          return new Promise((resolve, reject) => {
-            openAvatarCropper(file2, resolve, reject);
-          });
-        }
-        function openAvatarCropper(file2, onCrop, onError) {
-          if (!["image/jpeg", "image/png", "image/webp"].includes(file2.type)) {
-            onError(new Error("Choose a JPEG, PNG, or WebP image."));
-            return () => {
-            };
-          }
-          if (file2.size > 8 * 1024 * 1024) {
-            onError(new Error("Choose an image smaller than 8 MB."));
-            return () => {
-            };
-          }
-          const cropper = ensureAvatarCropper();
-          const canvas = $("#avatar-crop-canvas");
-          const selection = document.createElement("canvas");
-          selection.width = 480;
-          selection.height = 480;
-          const preview = $("#avatar-crop-preview");
-          const zoomControl = $("#avatar-crop-zoom");
-          const image2 = new Image();
-          const objectUrl = URL.createObjectURL(file2);
-          let zoom = 1;
-          let offsetX = 0;
-          let offsetY = 0;
-          let drag = null;
-          let closed = false;
-          const close = () => {
-            if (closed) return;
-            closed = true;
-            image2.onload = null;
-            URL.revokeObjectURL(objectUrl);
-            cropper.hidden = true;
-            canvas.removeEventListener("pointerdown", handlePointerDown);
-            canvas.removeEventListener("pointermove", handlePointerMove);
-            canvas.removeEventListener("pointerup", handlePointerUp);
-            canvas.removeEventListener("pointercancel", handlePointerUp);
-            zoomControl.removeEventListener("input", handleZoom);
-            $("#avatar-crop-use").removeEventListener("click", handleUse);
-            $("#avatar-crop-cancel").removeEventListener("click", handleCancel);
-            window.removeEventListener("resize", drawCrop);
-          };
-          const drawCrop = () => {
-            if (!image2.complete || !image2.naturalWidth || closed) return;
-            const context = canvas.getContext("2d");
-            const size = canvas.width;
-            const scale = Math.max(size / image2.naturalWidth, size / image2.naturalHeight) * zoom;
-            const displayedWidth = image2.naturalWidth * scale;
-            const displayedHeight = image2.naturalHeight * scale;
-            const maxX = Math.max(0, (displayedWidth - size) / 2);
-            const maxY = Math.max(0, (displayedHeight - size) / 2);
-            offsetX = Math.max(-maxX, Math.min(maxX, offsetX));
-            offsetY = Math.max(-maxY, Math.min(maxY, offsetY));
-            const cropSize = size * 0.76;
-            const sourceSize = cropSize / scale;
-            const sourceX = Math.max(0, Math.min(
-              image2.naturalWidth - sourceSize,
-              image2.naturalWidth / 2 - offsetX / scale - sourceSize / 2
-            ));
-            const sourceY = Math.max(0, Math.min(
-              image2.naturalHeight - sourceSize,
-              image2.naturalHeight / 2 - offsetY / scale - sourceSize / 2
-            ));
-            const selectionContext = selection.getContext("2d");
-            selectionContext.clearRect(0, 0, selection.width, selection.height);
-            selectionContext.drawImage(image2, sourceX, sourceY, sourceSize, sourceSize, 0, 0, selection.width, selection.height);
-            context.clearRect(0, 0, size, size);
-            context.drawImage(
-              image2,
-              0,
-              0,
-              image2.naturalWidth,
-              image2.naturalHeight,
-              size / 2 - displayedWidth / 2 + offsetX,
-              size / 2 - displayedHeight / 2 + offsetY,
-              displayedWidth,
-              displayedHeight
-            );
-            const previewContext = preview.getContext("2d");
-            previewContext.clearRect(0, 0, preview.width, preview.height);
-            previewContext.drawImage(selection, 0, 0, preview.width, preview.height);
-          };
-          const handlePointerDown = (event) => {
-            drag = { x: event.clientX, y: event.clientY, offsetX, offsetY };
-            canvas.setPointerCapture(event.pointerId);
-          };
-          const handlePointerMove = (event) => {
-            if (!drag) return;
-            const bounds = canvas.getBoundingClientRect();
-            const ratio = canvas.width / bounds.width;
-            offsetX = drag.offsetX + (event.clientX - drag.x) * ratio;
-            offsetY = drag.offsetY + (event.clientY - drag.y) * ratio;
-            drawCrop();
-          };
-          const handlePointerUp = () => {
-            drag = null;
-          };
-          const handleZoom = () => {
-            zoom = Number(zoomControl.value);
-            offsetX = 0;
-            offsetY = 0;
-            drawCrop();
-          };
-          const handleUse = () => {
-            drawCrop();
-            onCrop(selection.toDataURL("image/jpeg", 0.84));
-            close();
-          };
-          const handleCancel = () => {
-            close();
-            onError(new Error("Photo cropping cancelled. Your current photo was not changed."));
-          };
-          image2.onload = () => {
-            cropper.hidden = false;
-            zoom = 1;
-            offsetX = 0;
-            offsetY = 0;
-            zoomControl.value = "1";
-            drawCrop();
-            $("#avatar-crop-use").addEventListener("click", handleUse);
-            $("#avatar-crop-cancel").addEventListener("click", handleCancel);
-            canvas.addEventListener("pointerdown", handlePointerDown);
-            canvas.addEventListener("pointermove", handlePointerMove);
-            canvas.addEventListener("pointerup", handlePointerUp);
-            canvas.addEventListener("pointercancel", handlePointerUp);
-            zoomControl.addEventListener("input", handleZoom);
-            window.addEventListener("resize", drawCrop);
-          };
-          image2.onerror = () => {
-            close();
-            onError(new Error("The selected image could not be opened."));
-          };
-          image2.src = objectUrl;
-          return close;
-        }
-        function journeysPage() {
-          if (!currentGuard()) return;
-          shell(`
+      document.body.append(cropper);
+      return cropper;
+    }
+    function compressAvatar(file2) {
+      return new Promise((resolve, reject) => {
+        openAvatarCropper(file2, resolve, reject);
+      });
+    }
+    function openAvatarCropper(file2, onCrop, onError) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file2.type)) {
+        onError(new Error("Choose a JPEG, PNG, or WebP image."));
+        return () => {
+        };
+      }
+      if (file2.size > 8 * 1024 * 1024) {
+        onError(new Error("Choose an image smaller than 8 MB."));
+        return () => {
+        };
+      }
+      const cropper = ensureAvatarCropper();
+      const canvas = $("#avatar-crop-canvas");
+      const selection = document.createElement("canvas");
+      selection.width = 480;
+      selection.height = 480;
+      const preview = $("#avatar-crop-preview");
+      const zoomControl = $("#avatar-crop-zoom");
+      const image2 = new Image();
+      const objectUrl = URL.createObjectURL(file2);
+      let zoom = 1;
+      let offsetX = 0;
+      let offsetY = 0;
+      let drag = null;
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        image2.onload = null;
+        URL.revokeObjectURL(objectUrl);
+        cropper.hidden = true;
+        canvas.removeEventListener("pointerdown", handlePointerDown);
+        canvas.removeEventListener("pointermove", handlePointerMove);
+        canvas.removeEventListener("pointerup", handlePointerUp);
+        canvas.removeEventListener("pointercancel", handlePointerUp);
+        zoomControl.removeEventListener("input", handleZoom);
+        $("#avatar-crop-use").removeEventListener("click", handleUse);
+        $("#avatar-crop-cancel").removeEventListener("click", handleCancel);
+        window.removeEventListener("resize", drawCrop);
+      };
+      const drawCrop = () => {
+        if (!image2.complete || !image2.naturalWidth || closed) return;
+        const context = canvas.getContext("2d");
+        const size = canvas.width;
+        const scale = Math.max(size / image2.naturalWidth, size / image2.naturalHeight) * zoom;
+        const displayedWidth = image2.naturalWidth * scale;
+        const displayedHeight = image2.naturalHeight * scale;
+        const maxX = Math.max(0, (displayedWidth - size) / 2);
+        const maxY = Math.max(0, (displayedHeight - size) / 2);
+        offsetX = Math.max(-maxX, Math.min(maxX, offsetX));
+        offsetY = Math.max(-maxY, Math.min(maxY, offsetY));
+        const cropSize = size * 0.76;
+        const sourceSize = cropSize / scale;
+        const sourceX = Math.max(0, Math.min(
+          image2.naturalWidth - sourceSize,
+          image2.naturalWidth / 2 - offsetX / scale - sourceSize / 2
+        ));
+        const sourceY = Math.max(0, Math.min(
+          image2.naturalHeight - sourceSize,
+          image2.naturalHeight / 2 - offsetY / scale - sourceSize / 2
+        ));
+        const selectionContext = selection.getContext("2d");
+        selectionContext.clearRect(0, 0, selection.width, selection.height);
+        selectionContext.drawImage(image2, sourceX, sourceY, sourceSize, sourceSize, 0, 0, selection.width, selection.height);
+        context.clearRect(0, 0, size, size);
+        context.drawImage(
+          image2,
+          0,
+          0,
+          image2.naturalWidth,
+          image2.naturalHeight,
+          size / 2 - displayedWidth / 2 + offsetX,
+          size / 2 - displayedHeight / 2 + offsetY,
+          displayedWidth,
+          displayedHeight
+        );
+        const previewContext = preview.getContext("2d");
+        previewContext.clearRect(0, 0, preview.width, preview.height);
+        previewContext.drawImage(selection, 0, 0, preview.width, preview.height);
+      };
+      const handlePointerDown = (event) => {
+        drag = { x: event.clientX, y: event.clientY, offsetX, offsetY };
+        canvas.setPointerCapture(event.pointerId);
+      };
+      const handlePointerMove = (event) => {
+        if (!drag) return;
+        const bounds = canvas.getBoundingClientRect();
+        const ratio = canvas.width / bounds.width;
+        offsetX = drag.offsetX + (event.clientX - drag.x) * ratio;
+        offsetY = drag.offsetY + (event.clientY - drag.y) * ratio;
+        drawCrop();
+      };
+      const handlePointerUp = () => {
+        drag = null;
+      };
+      const handleZoom = () => {
+        zoom = Number(zoomControl.value);
+        offsetX = 0;
+        offsetY = 0;
+        drawCrop();
+      };
+      const handleUse = () => {
+        drawCrop();
+        onCrop(selection.toDataURL("image/jpeg", 0.84));
+        close();
+      };
+      const handleCancel = () => {
+        close();
+        onError(new Error("Photo cropping cancelled. Your current photo was not changed."));
+      };
+      image2.onload = () => {
+        cropper.hidden = false;
+        zoom = 1;
+        offsetX = 0;
+        offsetY = 0;
+        zoomControl.value = "1";
+        drawCrop();
+        $("#avatar-crop-use").addEventListener("click", handleUse);
+        $("#avatar-crop-cancel").addEventListener("click", handleCancel);
+        canvas.addEventListener("pointerdown", handlePointerDown);
+        canvas.addEventListener("pointermove", handlePointerMove);
+        canvas.addEventListener("pointerup", handlePointerUp);
+        canvas.addEventListener("pointercancel", handlePointerUp);
+        zoomControl.addEventListener("input", handleZoom);
+        window.addEventListener("resize", drawCrop);
+      };
+      image2.onerror = () => {
+        close();
+        onError(new Error("The selected image could not be opened."));
+      };
+      image2.src = objectUrl;
+      return close;
+    }
+    function journeysPage() {
+      if (!currentGuard()) return;
+      shell(`
         <main class="dashboard account-dashboard">
             ${dashNav("journeys.html")}
             <section class="dash-main journeys-main">
@@ -30655,220 +30418,209 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
                 <section class="journey-globe-panel">
                     <div class="journey-globe-layout">
                         <div class="journey-globe-wrap">
-                            <div id="journey-globe-map" aria-label="Rotating 3D Earth showing visited and upcoming destinations connected in travel-date order">
-                                <div class="earth-controls" aria-label="Earth controls">
-                                    <button type="button" data-earth-zoom-in aria-label="Zoom in" title="Zoom in">+</button>
-                                    <button type="button" data-earth-zoom-out aria-label="Zoom out" title="Zoom out">\u2212</button>
-                                    <button type="button" data-earth-reset aria-label="Orient Earth north-up" title="Orient Earth north-up">\u21BA</button>
-                                </div>
-                                <div id="earth-place-info" class="earth-place-info" role="status" hidden><strong></strong><span></span></div>
-                                <div class="earth-attribution">Satellite imagery \xA9 Esri, Maxar, Earthstar Geographics, and the GIS User Community</div>
-                            </div>
+                            <div id="journey-globe-map" aria-label="Interactive globe map with visited and upcoming trip markers" role="application"></div>
                         </div>
                         <aside class="globe-side-legend">
                             <span class="eyebrow">YOUR TRAVEL GLOBE</span>
-                            <h2>Your journey, connected.</h2>
+                            <h2>Your places.</h2>
                             <div class="globe-legend">
                                 <span><i class="visited-dot"></i>Visited <b id="visited-count">0</b></span>
                                 <span><i class="upcoming-dot"></i>Upcoming <b id="upcoming-count">0</b></span>
                             </div>
-                            <p class="globe-empty-note" role="status" hidden>Your booked destinations will appear here in travel-date order.</p>
+                            <p class="globe-empty-note" role="status" hidden>Your booked destinations will appear here.</p>
                             <div class="globe-route-groups">
                                 <section class="globe-route-group">
-                                    <h3><span><i class="visited-dot"></i>Visited route</span><b id="visited-leg-count">0 legs</b></h3>
+                                    <h3><span><i class="visited-dot"></i>Visited</span></h3>
                                     <ol id="visited-route-list" aria-label="Visited destinations in travel-date order"></ol>
                                 </section>
                                 <section class="globe-route-group">
-                                    <h3><span><i class="upcoming-dot"></i>Upcoming route</span><b id="upcoming-leg-count">0 legs</b></h3>
+                                    <h3><span><i class="upcoming-dot"></i>Upcoming</span></h3>
                                     <ol id="upcoming-route-list" aria-label="Upcoming destinations in travel-date order"></ol>
                                 </section>
                             </div>
-                            <p class="globe-hint">Lines show the order of booked destinations, not verified flight paths.</p>
+                            <p class="globe-hint">Zoom in to reveal city and region names. Select a place to focus the globe there.</p>
                             <button type="button" data-globe-reset class="text-button globe-reset-link">Fit all journeys \u21BA</button>
                         </aside>
                     </div>
                 </section>
             </section>
         </main>`);
-          refreshAccountSnapshot().then((snapshot) => initJourneyGlobe(snapshot.bookings || [])).catch((error61) => {
-            console.error("Could not refresh bookings for the travel globe:", error61);
-            initJourneyGlobe(read().bookings, error61.message);
-          });
-        }
-        function profilePage() {
-          if (!currentGuard()) return;
-          const u = activeUser(), defaultAvatar = "photo-1534528741775-53994a69daeb";
-          let selectedAvatar = u.avatar || defaultAvatar;
-          shell(`<main class="dashboard account-dashboard">${dashNav("profile.html")}<section class="dash-main profile-main"><div class="account-main-top"><span class="eyebrow">YOUR TRAVELX ACCOUNT</span><button class="icon-btn theme-toggle" aria-label="Toggle light and dark theme" title="Toggle theme">\u263C</button></div><header class="profile-page-heading"><div><span class="eyebrow">PROFILE & PREFERENCES</span><h1 class="section-title">Make it yours.</h1><p class="muted">Keep your details and travel preferences up to date.</p></div><span class="profile-step">ACCOUNT <b>01</b></span></header><div class="profile-settings-grid"><form class="profile-card" id="profile-form"><div class="profile-card-heading"><div><span class="eyebrow">PERSONAL DETAILS</span><h2>Your profile</h2></div><span class="profile-private">PRIVATE</span></div><div class="avatar-editor"><img id="avatar-preview" src="${esc2(avatarSource(selectedAvatar))}" alt="Profile photo"><div class="avatar-editor-copy"><strong>Profile photo</strong><p>Use a clear image, up to 8 MB. We\u2019ll resize it before saving.</p><div class="avatar-actions"><label class="btn btn-outline upload-photo" for="avatar-file">Upload photo</label><input id="avatar-file" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp"><button class="text-button" id="remove-photo" type="button">Remove</button></div></div></div><div class="profile-fields"><label>Full name<input class="form-control" name="name" required autocomplete="name" value="${esc2(u.name)}"></label><label>Email address<input class="form-control" type="email" value="${esc2(u.email)}" readonly><small>Managed securely by Neon Auth</small></label><label>Phone number<input class="form-control" name="phone" type="tel" autocomplete="tel" value="${esc2(u.phone)}" placeholder="Add a contact number"></label><label>Country<input class="form-control" name="country" autocomplete="country-name" value="${esc2(u.country)}" placeholder="Where are you based?"></label></div><div class="profile-save-row"><p id="profile-status" class="form-feedback" role="status" aria-live="polite"></p><button class="btn btn-gold" type="submit">Save profile <span>\u2197</span></button></div></form><aside class="profile-side-stack"><section class="profile-info-card"><span class="profile-card-icon" aria-hidden="true">\u2733</span><span class="eyebrow">ACCOUNT SECURITY</span><h2>Password & sign-in</h2><p>Your password is managed by Neon Auth and never stored in your TravelX profile.</p><button class="text-button" type="button" id="profile-reset-password">Email me a password reset link <span>\u2197</span></button><p class="profile-security-status" id="password-reset-status" class="form-feedback" role="status" aria-live="polite"></p></section><section class="profile-info-card preference-card"><span class="eyebrow">YOUR EXPERIENCE</span><h2>Appearance</h2><p>Choose the theme that feels right for your next journey.</p><button type="button" class="preference-toggle theme-toggle"><span class="theme-switch-track" aria-hidden="true"><i></i></span><span>Toggle light / dark mode</span></button></section></aside></div></section></main>`);
-          initJourneyGlobe();
-          const form = $("#profile-form"), status = $("#profile-status"), preview = $("#avatar-preview"), fileInput = $("#avatar-file");
-          fileInput.addEventListener("change", async () => {
-            const file2 = fileInput.files?.[0];
-            if (!file2) return;
-            formFeedback(status, "Preparing your photo\u2026", "neutral");
-            try {
-              selectedAvatar = await compressAvatar(file2);
-              preview.src = selectedAvatar;
-              formFeedback(status, "Photo ready. Save your profile to keep it.", "neutral");
-            } catch (error61) {
-              formFeedback(status, error61.message, "error");
-              fileInput.value = "";
-            }
-          });
-          $("#remove-photo").addEventListener("click", () => {
-            selectedAvatar = defaultAvatar;
-            preview.src = avatarSource(defaultAvatar);
-            fileInput.value = "";
-            formFeedback(status, "Default portrait selected.", "neutral");
-          });
-          form.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            const button = form.querySelector('button[type="submit"]');
-            button.disabled = true;
-            formFeedback(status, "Saving your profile\u2026", "neutral");
-            const fields = new FormData(form);
-            try {
-              await updateAccountProfile({ name: String(fields.get("name")).trim(), phone: String(fields.get("phone")).trim(), country: String(fields.get("country")).trim(), avatar: selectedAvatar });
-              formFeedback(status, "Your profile is saved to your TravelX account.");
-            } catch (error61) {
-              status.textContent = error61.message;
-            } finally {
-              button.disabled = false;
-            }
-          });
-          $("#profile-reset-password").addEventListener("click", async (event) => {
-            const button = event.currentTarget, message = $("#password-reset-status");
-            button.disabled = true;
-            formFeedback(message, "Sending reset link\u2026", "neutral");
-            try {
-              await sendPasswordReset(u.email);
-              formFeedback(message, "If an account exists for this email, a reset link is on its way.");
-            } catch (error61) {
-              formFeedback(message, error61.message, "error");
-            } finally {
-              button.disabled = false;
-            }
-          });
-        }
-        function wireShared() {
-          $$2(".theme-toggle").forEach((b) => {
-            b.classList.toggle("is-on", document.body.classList.contains("dark"));
-            b.addEventListener("click", () => {
-              const on2 = !document.body.classList.contains("dark");
-              document.body.classList.toggle("dark", on2);
-              $$2(".theme-toggle").forEach((button) => button.classList.toggle("is-on", on2));
-              write({ theme: on2 ? "dark" : "light" });
-            });
-          });
-          $(".mobile-toggle")?.addEventListener("click", () => $(".nav-links").classList.toggle("open"));
-          window.addEventListener("scroll", () => $(".topbar")?.classList.toggle("scrolled", scrollY > 12), { passive: true });
-          $$2(".newsletter-form").forEach((f) => f.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const email3 = String(new FormData(f).get("email") || "").trim().toLowerCase();
-            try {
-              await subscribeNewsletter(email3);
-              f.reset();
-              toast2("You\u2019re on the list. Thank you!");
-            } catch (error61) {
-              toast2(error61.message, "error");
-            }
-          }));
-          bindFavs();
-          bindCancels();
-        }
-        function wireNavigation() {
-          const nav = $(".topbar .nav-links"), toggle = $(".topbar .mobile-toggle");
-          if (!nav || !toggle) return;
-          toggle.addEventListener("click", () => toggle.setAttribute("aria-expanded", String(nav.classList.contains("open"))));
-          nav.addEventListener("click", (event) => {
-            if (event.target.closest("a")) {
-              nav.classList.remove("open");
-              toggle.setAttribute("aria-expanded", "false");
-            }
-          });
-        }
-        function bindFavs() {
-          $$2("[data-fav]").forEach((b) => {
-            const id = b.dataset.fav;
-            b.textContent = read().favorites.includes(id) ? "\u2665" : "\u2661";
-            b.onclick = async () => {
-              const saved = !read().favorites.includes(id);
-              try {
-                await saveFavorite(id, saved);
-                b.textContent = saved ? "\u2665" : "\u2661";
-                toast2(saved ? "Saved to favourites." : "Removed from favourites.");
-              } catch (error61) {
-                toast2(error61.message, "error");
-              }
-            };
-          });
-        }
-        function bindCancels() {
-          $$2(".cancel-booking").forEach((button) => button.onclick = async () => {
-            button.disabled = true;
-            try {
-              await cancelBooking(button.dataset.ref);
-              const row = button.closest(".booking-row"), status = row?.querySelector(".tag"), reference = button.dataset.ref;
-              button.remove();
-              if (status) {
-                status.textContent = "Cancelled";
-                status.classList.add("is-cancelled");
-              }
-              if (row && !row.querySelector(".booking-delete")) row.querySelector(".row-action")?.insertAdjacentHTML("beforeend", `<button class="booking-delete" type="button" data-ref="${esc2(reference)}" aria-label="Delete booking" title="Delete booking">\u2672</button>`);
-              bindDeleteButtons();
-              toast2("Booking cancelled.");
-            } catch (error61) {
-              button.disabled = false;
-              toast2(error61.message, "error");
-            }
-          });
-          bindDeleteButtons();
-        }
-        function bindDeleteButtons() {
-          $$2(".booking-delete").forEach((button) => button.onclick = async () => {
-            if (!confirm("Permanently delete this cancelled or completed booking?")) return;
-            button.disabled = true;
-            try {
-              await deleteBooking(button.dataset.ref);
-              button.closest(".booking-row")?.remove();
-              toast2("Booking removed from your history.");
-            } catch (error61) {
-              button.disabled = false;
-              toast2(error61.message, "error");
-            }
-          });
-        }
-        function maps() {
-          const el = $("#map");
-          if (!el) return;
-          const { lat, lng, name: name2 } = el.dataset;
-          const css = document.createElement("link");
-          css.rel = "stylesheet";
-          css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-          css.onload = () => import("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js").then(() => {
-            const map2 = L.map(el).setView([Number(lat), Number(lng)], 6);
-            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "\xA9 OpenStreetMap contributors" }).addTo(map2);
-            L.marker([Number(lat), Number(lng)]).addTo(map2).bindPopup(name2).openPopup();
-          }).catch(() => el.innerHTML = '<p class="panel">Map unavailable. Please check your connection.</p>');
-          document.head.append(css);
-        }
-        const routes = { "index.html": home, "destinations.html": destinationsPage, "destination-details.html": detailsPage, "search-results.html": searchPage, "trip-details.html": tripPage, "login.html": () => authPage(false), "register.html": () => authPage(true), "forgot-password.html": forgotPasswordPage, "reset-password.html": resetPasswordPage, "checkout.html": checkoutPage, "confirmation.html": confirmationPage, "dashboard.html": dashboardPage, "bookings.html": bookingsPage2, "favorites.html": favoritesPage, "journeys.html": journeysPage, "profile.html": profilePage };
-        if (pageName === "index.html") {
-          Promise.resolve().then(() => (init_home(), home_exports)).then((module2) => module2.renderHome());
-        } else {
-          (routes[pageName] || home)();
-          document.documentElement.classList.add("js-motion");
-          const observer = new IntersectionObserver((entries) => entries.forEach((e) => {
-            if (e.isIntersecting) {
-              e.target.classList.add("visible");
-              observer.unobserve(e.target);
-            }
-          }), { threshold: 0.08 });
-          $$2(".reveal").forEach((el) => observer.observe(el));
-          maps();
-        }
-      }).catch((error61) => console.error("TravelX startup failed:", error61));
+      refreshAccountSnapshot().then((snapshot) => initJourneyGlobe(snapshot.bookings || [])).catch((error61) => {
+        console.error("Could not refresh bookings for the travel globe:", error61);
+        initJourneyGlobe(read().bookings, error61.message);
+      });
     }
-  });
-  require_main();
+    function profilePage() {
+      if (!currentGuard()) return;
+      const u = activeUser(), defaultAvatar = "photo-1534528741775-53994a69daeb";
+      let selectedAvatar = u.avatar || defaultAvatar;
+      shell(`<main class="dashboard account-dashboard">${dashNav("profile.html")}<section class="dash-main profile-main"><div class="account-main-top"><span class="eyebrow">YOUR TRAVELX ACCOUNT</span><button class="icon-btn theme-toggle" aria-label="Toggle light and dark theme" title="Toggle theme">\u263C</button></div><header class="profile-page-heading"><div><span class="eyebrow">PROFILE & PREFERENCES</span><h1 class="section-title">Make it yours.</h1><p class="muted">Keep your details and travel preferences up to date.</p></div><span class="profile-step">ACCOUNT <b>01</b></span></header><div class="profile-settings-grid"><form class="profile-card" id="profile-form"><div class="profile-card-heading"><div><span class="eyebrow">PERSONAL DETAILS</span><h2>Your profile</h2></div><span class="profile-private">PRIVATE</span></div><div class="avatar-editor"><img id="avatar-preview" src="${esc2(avatarSource(selectedAvatar))}" alt="Profile photo"><div class="avatar-editor-copy"><strong>Profile photo</strong><p>Use a clear image, up to 8 MB. We\u2019ll resize it before saving.</p><div class="avatar-actions"><label class="btn btn-outline upload-photo" for="avatar-file">Upload photo</label><input id="avatar-file" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp"><button class="text-button" id="remove-photo" type="button">Remove</button></div></div></div><div class="profile-fields"><label>Full name<input class="form-control" name="name" required autocomplete="name" value="${esc2(u.name)}"></label><label>Email address<input class="form-control" type="email" value="${esc2(u.email)}" readonly><small>Managed securely by Neon Auth</small></label><label>Phone number<input class="form-control" name="phone" type="tel" autocomplete="tel" value="${esc2(u.phone)}" placeholder="Add a contact number"></label><label>Country<input class="form-control" name="country" autocomplete="country-name" value="${esc2(u.country)}" placeholder="Where are you based?"></label></div><div class="profile-save-row"><p id="profile-status" class="form-feedback" role="status" aria-live="polite"></p><button class="btn btn-gold" type="submit">Save profile <span>\u2197</span></button></div></form><aside class="profile-side-stack"><section class="profile-info-card"><span class="profile-card-icon" aria-hidden="true">\u2733</span><span class="eyebrow">ACCOUNT SECURITY</span><h2>Password & sign-in</h2><p>Your password is managed by Neon Auth and never stored in your TravelX profile.</p><button class="text-button" type="button" id="profile-reset-password">Email me a password reset link <span>\u2197</span></button><p class="profile-security-status" id="password-reset-status" class="form-feedback" role="status" aria-live="polite"></p></section><section class="profile-info-card preference-card"><span class="eyebrow">YOUR EXPERIENCE</span><h2>Appearance</h2><p>Choose the theme that feels right for your next journey.</p><button type="button" class="preference-toggle theme-toggle"><span class="theme-switch-track" aria-hidden="true"><i></i></span><span>Toggle light / dark mode</span></button></section></aside></div></section></main>`);
+      initJourneyGlobe();
+      const form = $("#profile-form"), status = $("#profile-status"), preview = $("#avatar-preview"), fileInput = $("#avatar-file");
+      fileInput.addEventListener("change", async () => {
+        const file2 = fileInput.files?.[0];
+        if (!file2) return;
+        formFeedback(status, "Preparing your photo\u2026", "neutral");
+        try {
+          selectedAvatar = await compressAvatar(file2);
+          preview.src = selectedAvatar;
+          formFeedback(status, "Photo ready. Save your profile to keep it.", "neutral");
+        } catch (error61) {
+          formFeedback(status, error61.message, "error");
+          fileInput.value = "";
+        }
+      });
+      $("#remove-photo").addEventListener("click", () => {
+        selectedAvatar = defaultAvatar;
+        preview.src = avatarSource(defaultAvatar);
+        fileInput.value = "";
+        formFeedback(status, "Default portrait selected.", "neutral");
+      });
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = form.querySelector('button[type="submit"]');
+        button.disabled = true;
+        formFeedback(status, "Saving your profile\u2026", "neutral");
+        const fields = new FormData(form);
+        try {
+          await updateAccountProfile({ name: String(fields.get("name")).trim(), phone: String(fields.get("phone")).trim(), country: String(fields.get("country")).trim(), avatar: selectedAvatar });
+          formFeedback(status, "Your profile is saved to your TravelX account.");
+        } catch (error61) {
+          status.textContent = error61.message;
+        } finally {
+          button.disabled = false;
+        }
+      });
+      $("#profile-reset-password").addEventListener("click", async (event) => {
+        const button = event.currentTarget, message = $("#password-reset-status");
+        button.disabled = true;
+        formFeedback(message, "Sending reset link\u2026", "neutral");
+        try {
+          await sendPasswordReset(u.email);
+          formFeedback(message, "If an account exists for this email, a reset link is on its way.");
+        } catch (error61) {
+          formFeedback(message, error61.message, "error");
+        } finally {
+          button.disabled = false;
+        }
+      });
+    }
+    function wireShared() {
+      $$2(".theme-toggle").forEach((b) => {
+        b.classList.toggle("is-on", document.body.classList.contains("dark"));
+        b.addEventListener("click", () => {
+          const on2 = !document.body.classList.contains("dark");
+          document.body.classList.toggle("dark", on2);
+          $$2(".theme-toggle").forEach((button) => button.classList.toggle("is-on", on2));
+          write({ theme: on2 ? "dark" : "light" });
+        });
+      });
+      $(".mobile-toggle")?.addEventListener("click", () => $(".nav-links").classList.toggle("open"));
+      window.addEventListener("scroll", () => $(".topbar")?.classList.toggle("scrolled", scrollY > 12), { passive: true });
+      $$2(".newsletter-form").forEach((f) => f.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email3 = String(new FormData(f).get("email") || "").trim().toLowerCase();
+        try {
+          await subscribeNewsletter(email3);
+          f.reset();
+          toast2("You\u2019re on the list. Thank you!");
+        } catch (error61) {
+          toast2(error61.message, "error");
+        }
+      }));
+      bindFavs();
+      bindCancels();
+    }
+    function wireNavigation() {
+      const nav = $(".topbar .nav-links"), toggle = $(".topbar .mobile-toggle");
+      if (!nav || !toggle) return;
+      toggle.addEventListener("click", () => toggle.setAttribute("aria-expanded", String(nav.classList.contains("open"))));
+      nav.addEventListener("click", (event) => {
+        if (event.target.closest("a")) {
+          nav.classList.remove("open");
+          toggle.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+    function bindFavs() {
+      $$2("[data-fav]").forEach((b) => {
+        const id = b.dataset.fav;
+        b.textContent = read().favorites.includes(id) ? "\u2665" : "\u2661";
+        b.onclick = async () => {
+          const saved = !read().favorites.includes(id);
+          try {
+            await saveFavorite(id, saved);
+            b.textContent = saved ? "\u2665" : "\u2661";
+            toast2(saved ? "Saved to favourites." : "Removed from favourites.");
+          } catch (error61) {
+            toast2(error61.message, "error");
+          }
+        };
+      });
+    }
+    function bindCancels() {
+      $$2(".cancel-booking").forEach((button) => button.onclick = async () => {
+        button.disabled = true;
+        try {
+          await cancelBooking(button.dataset.ref);
+          const row = button.closest(".booking-row"), status = row?.querySelector(".tag"), reference = button.dataset.ref;
+          button.remove();
+          if (status) {
+            status.textContent = "Cancelled";
+            status.classList.add("is-cancelled");
+          }
+          if (row && !row.querySelector(".booking-delete")) row.querySelector(".row-action")?.insertAdjacentHTML("beforeend", `<button class="booking-delete" type="button" data-ref="${esc2(reference)}" aria-label="Delete booking" title="Delete booking">\u2672</button>`);
+          bindDeleteButtons();
+          toast2("Booking cancelled.");
+        } catch (error61) {
+          button.disabled = false;
+          toast2(error61.message, "error");
+        }
+      });
+      bindDeleteButtons();
+    }
+    function bindDeleteButtons() {
+      $$2(".booking-delete").forEach((button) => button.onclick = async () => {
+        if (!confirm("Permanently delete this cancelled or completed booking?")) return;
+        button.disabled = true;
+        try {
+          await deleteBooking(button.dataset.ref);
+          button.closest(".booking-row")?.remove();
+          toast2("Booking removed from your history.");
+        } catch (error61) {
+          button.disabled = false;
+          toast2(error61.message, "error");
+        }
+      });
+    }
+    function maps() {
+      const el = $("#map");
+      if (!el) return;
+      const { lat, lng, name: name2 } = el.dataset;
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      css.onload = () => import("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js").then(() => {
+        const map2 = L.map(el).setView([Number(lat), Number(lng)], 6);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "\xA9 OpenStreetMap contributors" }).addTo(map2);
+        L.marker([Number(lat), Number(lng)]).addTo(map2).bindPopup(name2).openPopup();
+      }).catch(() => el.innerHTML = '<p class="panel">Map unavailable. Please check your connection.</p>');
+      document.head.append(css);
+    }
+    const routes = { "index.html": home, "destinations.html": destinationsPage, "destination-details.html": detailsPage, "search-results.html": searchPage, "trip-details.html": tripPage, "login.html": () => authPage(false), "register.html": () => authPage(true), "forgot-password.html": forgotPasswordPage, "reset-password.html": resetPasswordPage, "checkout.html": checkoutPage, "confirmation.html": confirmationPage, "dashboard.html": dashboardPage, "bookings.html": bookingsPage, "favorites.html": favoritesPage, "journeys.html": journeysPage, "profile.html": profilePage };
+    if (pageName === "index.html") {
+      Promise.resolve().then(() => (init_home(), home_exports)).then((module) => module.renderHome());
+    } else {
+      (routes[pageName] || home)();
+      document.documentElement.classList.add("js-motion");
+      const observer = new IntersectionObserver((entries) => entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.classList.add("visible");
+          observer.unobserve(e.target);
+        }
+      }), { threshold: 0.08 });
+      $$2(".reveal").forEach((el) => observer.observe(el));
+      maps();
+    }
+  }).catch((error61) => console.error("TravelX startup failed:", error61));
 })();

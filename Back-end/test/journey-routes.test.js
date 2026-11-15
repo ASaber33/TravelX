@@ -44,6 +44,25 @@ test("orders booked stops by date and keeps past and future routes separate", ()
   ]);
 });
 
+test("Egypt bookings map to Hurghada with GeoJSON longitude-first coordinates", () => {
+  const egypt = {
+    id: "egypt",
+    name: "Egypt & Red Sea",
+    country: "Egypt",
+    lat: 27.2579,
+    lng: 33.8116
+  };
+  const result = buildJourneyMapData(
+    [{ tripId: "egypt-trip", status: "Upcoming", date: "2026-11-20" }],
+    [egypt],
+    [{ id: "egypt-trip", destinationId: "egypt" }],
+    "2026-11-14"
+  );
+
+  assert.deepEqual(result.markers[0].coordinates, [33.8116, 27.2579]);
+  assert.equal(result.markers[0].destination.name, "Egypt & Red Sea");
+});
+
 test("great-circle lines follow the curvature of the earth", () => {
   const geometry = createGreatCircleGeometry([2.3522, 48.8566], [139.6503, 35.6762]);
 
