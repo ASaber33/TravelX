@@ -4,6 +4,7 @@ Back-end/.env.local
 Back-end/.neon
 
 # Dependencies and generated build output
+node_modules/
 Back-end/node_modules/
 Back-end/dist/
 .vercel/

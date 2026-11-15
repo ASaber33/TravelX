@@ -1,5 +1,15 @@
 {
   "name": "travelx-vercel",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "packageManager": "npm@11.6.2",
+  "scripts": {
+    "build": "npm --prefix Back-end run build:vercel",
+    "start": "node Back-end/src/server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "pg": "^8.16.3"
+  }
 }

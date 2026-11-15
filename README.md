@@ -29,8 +29,8 @@ Vercel Node.js Function. In Vercel, import the `ASaber33/TravelX` repository,
 keep the Root Directory as `./`, and use the Other framework preset. The
 configuration file supplies the build settings; do not override them in the
 Vercel dashboard. The deployment installs only the API's production packages
-and reuses the already-bundled frontend script, avoiding the large local build
-toolchain.
+from the root lockfile and reuses the already-bundled frontend script, avoiding
+the large local build toolchain.
 
 Add these environment variables in Vercel for Production and Preview, using
 the values from the intended Neon branch:
@@ -45,6 +45,18 @@ The database schema and seed data must already be applied to that Neon branch.
 After the first deployment, add the Vercel production domain (and any Preview
 domain used for sign-in) to Neon Auth's trusted domains. Then redeploy after
 adding or changing environment variables.
+
+## Deploy the complete app to Railway
+
+Create a Railway service from this repository and keep its Root Directory at
+the repository root. The root `package.json` installs the backend's production
+dependencies and builds the site; its start command runs the Express server,
+which serves both the pages and `/api/*` routes.
+
+Set `DATABASE_URL`, `NEON_AUTH_BASE_URL`, and `NEON_AUTH_JWKS_URL` in the
+Railway service variables from the intended Neon branch. Railway supplies
+`PORT` automatically. Ensure the database migrations are applied and add the
+Railway public domain to Neon Auth's trusted domains after deployment.
 
 ## Database and authentication
 

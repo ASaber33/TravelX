@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "installCommand": "npm --prefix Back-end ci --omit=dev --no-audit --no-fund",
+  "installCommand": "npm ci --omit=dev --no-audit --no-fund",
   "buildCommand": "npm --prefix Back-end run build:vercel",
   "outputDirectory": "Back-end/dist"
 }
