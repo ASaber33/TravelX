@@ -29941,6 +29941,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       $("#max-price").addEventListener("input", filterDest);
       $("#category").addEventListener("change", filterDest);
       $("#sort").addEventListener("change", filterDest);
+      filterDest();
     }
     function filterDest() {
       const term = $("#dest-search").value.trim().toLocaleLowerCase(), cat = $("#category").value, maxText = $("#max-price").value.trim(), max = maxText === "" ? null : Number(maxText), sort = $("#sort").value;
@@ -29969,7 +29970,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         else results.sort((a, b) => Number(destinations.find((d) => d.id === b.destinationId)?.rating || 0) - Number(destinations.find((d) => d.id === a.destinationId)?.rating || 0));
         $("#trip-results").innerHTML = results.length ? results.map(tripRow).join("") : '<div class="empty">No trips match those filters.</div>';
       };
-      $$2("#duration-filter,#price-filter,#trip-sort").forEach((el) => el.addEventListener("change", apply));
+      $("#duration-filter,#price-filter,#trip-sort").forEach((el) => el.addEventListener("change", apply));
+      apply();
     }
     function tripPage() {
       const trip = trips.find((item) => item.id === new URLSearchParams(location.search).get("id")) || trips[0];
