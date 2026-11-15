@@ -63,6 +63,16 @@ test("Egypt bookings map to Hurghada with GeoJSON longitude-first coordinates", 
   assert.equal(result.markers[0].destination.name, "Egypt & Red Sea");
 });
 
+test("shows separate visited and upcoming pins for the same destination", () => {
+  const result = buildJourneyMapData([
+    { tripId: "paris-trip", status: "Completed", date: "2025-06-02" },
+    { tripId: "paris-trip", status: "Upcoming", date: "2027-01-03" }
+  ], destinations, trips, "2026-11-14");
+
+  assert.deepEqual(result.markers.map((visit) => visit.state), ["visited", "upcoming"]);
+  assert.deepEqual(result.markers.map((visit) => visit.destinationId), ["paris", "paris"]);
+});
+
 test("great-circle lines follow the curvature of the earth", () => {
   const geometry = createGreatCircleGeometry([2.3522, 48.8566], [139.6503, 35.6762]);
 

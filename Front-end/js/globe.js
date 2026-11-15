@@ -198,7 +198,9 @@ export async function initJourneyGlobe(bookings = read().bookings, loadError = '
                 map.on('click', 'journey-stops-marker', event => {
                     const feature = event.features?.[0];
                     if (!feature) return;
-                    const visit = markers.find(item => item.destinationId === feature.properties.id);
+                    const visit = markers.find(item =>
+                        item.destinationId === feature.properties.id && item.state === feature.properties.state
+                    );
                     if (visit) showVisit(visit);
                 });
                 map.on('mouseenter', 'journey-stops-marker', () => { map.getCanvas().style.cursor = 'pointer'; });

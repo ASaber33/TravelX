@@ -29607,11 +29607,12 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     });
     const visited = visits.filter((visit2) => visit2.state === "visited");
     const upcoming = visits.filter((visit2) => visit2.state === "upcoming");
-    const markerByDestination = /* @__PURE__ */ new Map();
+    const markerByDestinationAndState = /* @__PURE__ */ new Map();
     for (const visit2 of visits) {
-      const previous = markerByDestination.get(visit2.destinationId);
-      if (!previous || visit2.state === "upcoming") {
-        markerByDestination.set(visit2.destinationId, visit2);
+      const markerKey = `${visit2.destinationId}:${visit2.state}`;
+      const previous = markerByDestinationAndState.get(markerKey);
+      if (!previous || visit2.state === "visited" && visit2.date > previous.date) {
+        markerByDestinationAndState.set(markerKey, visit2);
       }
     }
     const routes = ["visited", "upcoming"].flatMap((state) => {
@@ -29628,7 +29629,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       });
     });
     return {
-      markers: [...markerByDestination.values()],
+      markers: [...markerByDestinationAndState.values()],
       routes,
       visited,
       upcoming
@@ -29814,7 +29815,9 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
           map2.on("click", "journey-stops-marker", (event) => {
             const feature = event.features?.[0];
             if (!feature) return;
-            const visit2 = markers.find((item) => item.destinationId === feature.properties.id);
+            const visit2 = markers.find(
+              (item) => item.destinationId === feature.properties.id && item.state === feature.properties.state
+            );
             if (visit2) showVisit(visit2);
           });
           map2.on("mouseenter", "journey-stops-marker", () => {

@@ -133,11 +133,12 @@ export function buildJourneyMapData(bookings, destinations, trips, today) {
 
     const visited = visits.filter(visit => visit.state === 'visited');
     const upcoming = visits.filter(visit => visit.state === 'upcoming');
-    const markerByDestination = new Map();
+    const markerByDestinationAndState = new Map();
     for (const visit of visits) {
-        const previous = markerByDestination.get(visit.destinationId);
-        if (!previous || visit.state === 'upcoming') {
-            markerByDestination.set(visit.destinationId, visit);
+        const markerKey = `${visit.destinationId}:${visit.state}`;
+        const previous = markerByDestinationAndState.get(markerKey);
+        if (!previous || (visit.state === 'visited' && visit.date > previous.date)) {
+            markerByDestinationAndState.set(markerKey, visit);
         }
     }
 
@@ -156,7 +157,7 @@ export function buildJourneyMapData(bookings, destinations, trips, today) {
     });
 
     return {
-        markers: [...markerByDestination.values()],
+        markers: [...markerByDestinationAndState.values()],
         routes,
         visited,
         upcoming
