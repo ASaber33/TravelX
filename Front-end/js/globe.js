@@ -128,7 +128,7 @@ export async function initJourneyGlobe(bookings = read().bookings, loadError = '
         map.on('style.load', async () => {
             try {
                 map.setProjection({ type: 'globe' });
-                map.setFog({});
+                if (typeof map.setFog === 'function') map.setFog({});
                 map.addSource('journey-stops', {
                     type: 'geojson',
                     data: {

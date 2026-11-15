@@ -29745,7 +29745,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       map2.on("style.load", async () => {
         try {
           map2.setProjection({ type: "globe" });
-          map2.setFog({});
+          if (typeof map2.setFog === "function") map2.setFog({});
           map2.addSource("journey-stops", {
             type: "geojson",
             data: {
