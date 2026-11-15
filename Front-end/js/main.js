@@ -27,7 +27,78 @@ function filterDest(){const term=$('#dest-search').value.toLowerCase(),cat=$('#c
 function detailsPage(){const d=destinations.find(x=>x.id===new URLSearchParams(location.search).get('id'))||destinations[0],related=trips.filter(t=>t.destinationId===d.id);shell(`<main><section class="detail-hero" style="background-image:linear-gradient(0deg,#101a16aa,transparent),url('${img(d.image,1700)}')"><div class="container"><span class="eyebrow">${d.country} · ${d.category}</span><h1 class="section-title" style="color:white;font-size:4rem">${d.name}</h1><p>★ ${d.rating} · ${d.reviews} thoughtful traveller reviews</p></div></section><div class="container content-section"><div class="detail-layout"><div><span class="eyebrow">A sense of place</span><h2 class="section-title">Discover ${d.name}</h2><p class="muted">${d.description}</p><div class="gallery">${[d.image,related[0]?.image||d.image,'photo-1470770841072-f978cf4d019e'].map((im,i)=>image(im,`${d.name} view ${i+1}`,800)).join('')}</div><h2 class="section-title" style="font-size:2rem;margin-top:35px">A few highlights</h2><ul>${d.attractions.map(x=>`<li>${x}</li>`).join('')}</ul><h2 class="section-title" style="font-size:2rem;margin-top:35px">Journeys here</h2>${related.map(tripRow).join('')||'<p>New journeys coming soon.</p>'}<h2 class="section-title" style="font-size:2rem;margin-top:35px">Find it on the map</h2><div class="map"><div id="map" data-lat="${d.lat}" data-lng="${d.lng}" data-name="${d.name}"></div></div></div><aside class="panel"><span class="eyebrow">Make it yours</span><h3 class="section-title" style="font-size:1.8rem">From $${d.price.toLocaleString()}</h3><p class="muted">per person · thoughtfully planned</p><p>★★★★★ &nbsp; ${d.rating} (${d.reviews} reviews)</p><button class="btn btn-gold" style="width:100%" onclick="location.href='${link('search-results.html')}?destination=${d.name}'">Explore trips →</button><button class="btn btn-outline" style="width:100%;margin-top:10px" data-fav="${d.id}">♡ Save to favourites</button></aside></div></div></main>`);}
 function tripRow(t){return `<article class="booking-row"><a href="${link('trip-details.html')}?id=${t.id}">${image(t.image,t.title,400)}</a><div><a href="${link('trip-details.html')}?id=${t.id}"><strong>${t.title}</strong></a><div class="muted">${t.duration} days · from $${t.price.toLocaleString()}</div></div><a class="btn btn-outline row-action" href="${link('trip-details.html')}?id=${t.id}">View trip →</a></article>`}
 function searchPage(){const params=new URLSearchParams(location.search),term=(params.get('destination')||'').toLowerCase(),matched=destinations.filter(d=>!term||d.name.toLowerCase().includes(term)||d.country.toLowerCase().includes(term)),tripList=trips.filter(t=>matched.some(d=>d.id===t.destinationId));shell(`<main class="container"><div class="page-head"><span class="eyebrow">Your next chapter</span><h1 class="section-title">${term?'Journeys for '+esc(params.get('destination')):'Experiences'}</h1><p class="muted">${tripList.length} considered journeys · ${params.get('guests')||2} travellers</p></div><div class="filters"><select id="duration-filter"><option value="0">Any duration</option><option value="5">5+ days</option><option value="7">7+ days</option></select><select id="price-filter"><option value="0">Any price</option><option value="1800">Under $1,800</option><option value="2400">Under $2,400</option></select><select id="trip-sort"><option value="popular">Recommended</option><option value="low">Price: low to high</option></select></div><div id="trip-results">${tripList.length?tripList.map(tripRow).join(''):`<div class="empty"><h3>No journeys match this search</h3><p class="muted">Explore all destinations to find your fit.</p><a class="btn btn-gold" href="${link('destinations.html')}">Browse destinations</a></div>`}</div></main>`);const apply=()=>{let a=tripList.filter(t=>(!Number($('#duration-filter').value)||t.duration>=Number($('#duration-filter').value))&&(!Number($('#price-filter').value)||t.price<=Number($('#price-filter').value)));if($('#trip-sort').value==='low')a.sort((x,y)=>x.price-y.price);$('#trip-results').innerHTML=a.length?a.map(tripRow).join(''):'<div class="empty">No trips match those filters.</div>'};$$('#duration-filter,#price-filter,#trip-sort').forEach(el=>el.addEventListener('change',apply));}
-function tripPage(){const t=trips.find(x=>x.id===new URLSearchParams(location.search).get('id'))||trips[0],d=destinations.find(x=>x.id===t.destinationId);shell(`<main class="container"><div class="page-head"><span class="eyebrow">${d.name} · ${t.duration} days</span><h1 class="section-title">${t.title}</h1><p class="muted">A carefully considered journey in ${d.country}.</p></div><div class="two-col"><div><div class="gallery">${[t.image,d.image,'photo-1500530855697-b586d89ba3ee'].map((im,i)=>image(im,`${t.title} scene ${i+1}`,900)).join('')}</div><h2 class="section-title" style="font-size:2rem;margin-top:30px">The journey</h2><p class="muted">${d.description}</p><h3>Day by day</h3><ol class="itinerary">${t.itinerary.map(x=>`<li>${x}</li>`).join('')}</ol><div class="two-col"><div><h3>Included</h3><ul class="check-list">${t.included.map(x=>`<li>${x}</li>`).join('')}</ul></div><div><h3>Not included</h3><ul>${t.excluded.map(x=>`<li>${x}</li>`).join('')}</ul></div></div></div><aside class="panel"><span class="eyebrow">A journey to remember</span><h2 class="section-title" style="font-size:2rem">From $${t.price.toLocaleString()}</h2><p class="muted">per person · ${t.dates}</p><label>Preferred travel date<input class="form-control" type="date" id="travel-date" min="${new Date().toISOString().slice(0,10)}" style="width:100%;margin:8px 0"></label><label>Guests<select class="form-control" id="guest-count" style="width:100%;margin:8px 0"><option>2</option><option>1</option><option>3</option><option>4</option><option>5</option></select></label><button class="btn btn-gold" id="reserve-trip" style="width:100%;margin-top:14px">Reserve this journey →</button><p class="muted" style="font-size:.8rem;text-align:center">No payment is taken in this demo.</p><p>★ ${d.rating} · ${d.reviews} reviews</p></aside></div></main>`);$('#reserve-trip').addEventListener('click',()=>{const q=new URLSearchParams({trip:t.id,guests:$('#guest-count').value});if($('#travel-date').value)q.set('date',$('#travel-date').value);location.href=link('checkout.html')+'?'+q})}
+function tripPage() {
+    const trip = trips.find(item => item.id === new URLSearchParams(location.search).get('id')) || trips[0];
+    const destination = destinations.find(item => item.id === trip.destinationId);
+
+    shell(`
+        <main class="container trip-details-page">
+            <header class="page-head">
+                <span class="eyebrow">${esc(destination.name)} · ${trip.duration} days</span>
+                <h1 class="section-title">${esc(trip.title)}</h1>
+                <p class="muted">A carefully considered journey in ${esc(destination.country)}.</p>
+            </header>
+            <div class="two-col trip-layout">
+                <div class="trip-content">
+                    <div class="gallery trip-gallery">
+                        ${[trip.image, destination.image, 'photo-1500530855697-b586d89ba3ee']
+                            .map((asset, index) => image(asset, `${trip.title} scene ${index + 1}`, 900)).join('')}
+                    </div>
+                    <section class="trip-overview" aria-labelledby="trip-overview-title">
+                        <span class="eyebrow">A sense of place</span>
+                        <h2 class="section-title" id="trip-overview-title">The journey</h2>
+                        <p class="muted">${esc(destination.description)}</p>
+                    </section>
+                    <section class="trip-itinerary" aria-labelledby="trip-itinerary-title">
+                        <div class="trip-section-heading">
+                            <div>
+                                <span class="eyebrow">Your days, thoughtfully planned</span>
+                                <h3 id="trip-itinerary-title">Day by day</h3>
+                            </div>
+                            <span class="trip-duration">${trip.duration} days</span>
+                        </div>
+                        <ol class="itinerary">
+                            ${trip.itinerary.map((stop, index) => `
+                                <li><span class="itinerary-day">Day ${String(index + 1).padStart(2, '0')}</span><span>${esc(stop)}</span></li>
+                            `).join('')}
+                        </ol>
+                    </section>
+                    <div class="trip-inclusions" aria-label="Journey inclusions">
+                        <section class="trip-inclusion-card">
+                            <h3>Included</h3>
+                            <ul class="check-list">${trip.included.map(item => `<li>${esc(item)}</li>`).join('')}</ul>
+                        </section>
+                        <section class="trip-inclusion-card">
+                            <h3>Not included</h3>
+                            <ul>${trip.excluded.map(item => `<li>${esc(item)}</li>`).join('')}</ul>
+                        </section>
+                    </div>
+                </div>
+                <aside class="panel trip-booking-panel">
+                    <span class="eyebrow">A journey to remember</span>
+                    <h2 class="section-title" style="font-size:2rem">From $${trip.price.toLocaleString()}</h2>
+                    <p class="muted">per person · ${esc(trip.dates)}</p>
+                    <label>Preferred travel date
+                        <input class="form-control" type="date" id="travel-date" min="${new Date().toISOString().slice(0, 10)}" style="width:100%;margin:8px 0">
+                    </label>
+                    <label>Guests
+                        <select class="form-control" id="guest-count" style="width:100%;margin:8px 0">
+                            <option>2</option><option>1</option><option>3</option><option>4</option><option>5</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-gold" id="reserve-trip" style="width:100%;margin-top:14px">Reserve this journey →</button>
+                    <p class="muted" style="font-size:.8rem;text-align:center">No payment is taken in this demo.</p>
+                    <p>★ ${destination.rating} · ${destination.reviews} reviews</p>
+                </aside>
+            </div>
+        </main>`);
+
+    $('#reserve-trip').addEventListener('click', () => {
+        const query = new URLSearchParams({ trip: trip.id, guests: $('#guest-count').value });
+        if ($('#travel-date').value) query.set('date', $('#travel-date').value);
+        location.href = link('checkout.html') + '?' + query;
+    });
+}
 function authPage(register = false) {
     const title = register ? 'Create your account' : 'Welcome back';
     shell(`<main class="form-page auth-page"><section class="form-photo" aria-hidden="true"><div class="auth-photo-copy"><span>TRAVELX PRIVATE</span><strong>Travel begins<br>with a feeling.</strong><small>Made for the way you want to feel.</small></div></section><div class="form-wrap"><form class="form-box" id="auth-form"><div class="auth-card-head"><span class="eyebrow">${register ? 'YOUR TRAVELX ACCOUNT' : 'WELCOME TO TRAVELX'}</span><span>01</span></div><h1>${title}</h1><p class="muted">${register ? 'Start planning journeys that feel like yours.' : 'Sign in to continue your journey.'}</p><p id="auth-error" class="muted" role="alert" aria-live="polite" hidden></p>${register ? `<label>Full name<input class="form-control" name="name" required autocomplete="name" placeholder="Your full name"></label>` : ''}<label>Email address<input class="form-control" name="email" type="email" required autocomplete="email" placeholder="you@example.com"></label><label>Password<div class="password-wrap"><input class="form-control" name="password" type="password" required minlength="${register ? 8 : 1}" autocomplete="${register ? 'new-password' : 'current-password'}" placeholder="${register ? 'At least 8 characters' : 'Your password'}"><button type="button" class="show-password">Show</button></div></label>${register ? `<label>Confirm password<input class="form-control" name="confirm" type="password" required placeholder="Repeat your password"></label>` : `<div class="auth-options"><label><input name="remember" type="checkbox"> Remember me</label><a class="muted" href="${link('forgot-password.html')}" id="forgot">Forgot password?</a></div>`}<button class="btn btn-gold" type="submit">${register ? 'Create account' : 'Log in'} <span>↗</span></button><p class="auth-switch muted">${register ? 'Already have an account?' : 'New to TravelX?'} <a href="${link(register ? 'login.html' : 'register.html')}">${register ? 'Log in' : 'Create an account'}</a></p></form></div></main>`);

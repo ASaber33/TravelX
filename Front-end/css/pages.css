@@ -1,5 +1,31 @@
 .content-section{padding:30px 0 76px}.two-col{display:grid;grid-template-columns:1.3fr .7fr;gap:30px}.gallery{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px;height:300px}.gallery img{width:100%;height:100%;object-fit:cover}.gallery img:first-child{grid-row:span 2}.itinerary li{padding:9px 0}.check-list{list-style:none;padding:0}.check-list li{margin:8px 0}.check-list li:before{content:'✓';color:var(--gold);font-weight:bold;margin-right:10px}
 
+.trip-layout{align-items:start;gap:34px}
+.trip-content{min-width:0}
+.trip-gallery{height:330px;margin-bottom:24px;overflow:hidden;border-radius:10px}
+.trip-overview,.trip-itinerary,.trip-inclusion-card{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.trip-overview{margin:0 0 18px;padding:22px 24px}
+.trip-overview .eyebrow,.trip-section-heading .eyebrow{font-size:.62rem}
+.trip-overview .section-title{margin:.35rem 0 .55rem;font-size:1.9rem!important}
+.trip-overview p{margin:0;line-height:1.75}
+.trip-itinerary{margin:0 0 18px;padding:22px 24px}
+.trip-section-heading{display:flex;align-items:end;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.trip-section-heading h3{margin:5px 0 0;color:var(--ink);font:500 1.4rem/1.2 var(--font-head)}
+.trip-duration{flex:none;padding:5px 9px;border-radius:20px;background:#c5a46d22;color:#9b7437;font-size:.67rem;font-weight:700}
+.trip-itinerary .itinerary{margin:0;padding:0;list-style:none}
+.trip-itinerary .itinerary li{display:grid;grid-template-columns:62px minmax(0,1fr);gap:12px;padding:13px 0;border-bottom:1px solid var(--line);line-height:1.5}
+.trip-itinerary .itinerary li:last-child{border-bottom:0;padding-bottom:0}
+.itinerary-day{color:#9b7437;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.trip-inclusions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.trip-inclusion-card{padding:20px 22px}
+.trip-inclusion-card h3{margin:0 0 8px;color:var(--ink);font:500 1.15rem/1.25 var(--font-head)}
+.trip-inclusion-card ul{margin:0;padding-left:1.1rem;color:var(--muted);font-size:.82rem}
+.trip-inclusion-card .check-list{padding:0;list-style:none}
+.trip-inclusion-card .check-list li{margin:7px 0}
+.trip-booking-panel{position:sticky;top:98px}
+@media(max-width:760px){.trip-gallery{height:280px}.trip-overview,.trip-itinerary{padding:18px}.trip-inclusions{gap:10px}.trip-inclusion-card{padding:16px}}
+@media(max-width:520px){.trip-gallery{height:250px}.trip-overview .section-title{font-size:1.55rem!important}.trip-inclusions{grid-template-columns:1fr}.trip-section-heading{align-items:start;flex-direction:column}}
+
 @media(max-width:700px){
  .two-col{grid-template-columns:minmax(0,1fr);gap:18px}
 }

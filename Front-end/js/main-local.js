@@ -29965,12 +29965,72 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       $$2("#duration-filter,#price-filter,#trip-sort").forEach((el) => el.addEventListener("change", apply));
     }
     function tripPage() {
-      const t = trips.find((x) => x.id === new URLSearchParams(location.search).get("id")) || trips[0], d = destinations.find((x) => x.id === t.destinationId);
-      shell(`<main class="container"><div class="page-head"><span class="eyebrow">${d.name} \xB7 ${t.duration} days</span><h1 class="section-title">${t.title}</h1><p class="muted">A carefully considered journey in ${d.country}.</p></div><div class="two-col"><div><div class="gallery">${[t.image, d.image, "photo-1500530855697-b586d89ba3ee"].map((im, i) => image(im, `${t.title} scene ${i + 1}`, 900)).join("")}</div><h2 class="section-title" style="font-size:2rem;margin-top:30px">The journey</h2><p class="muted">${d.description}</p><h3>Day by day</h3><ol class="itinerary">${t.itinerary.map((x) => `<li>${x}</li>`).join("")}</ol><div class="two-col"><div><h3>Included</h3><ul class="check-list">${t.included.map((x) => `<li>${x}</li>`).join("")}</ul></div><div><h3>Not included</h3><ul>${t.excluded.map((x) => `<li>${x}</li>`).join("")}</ul></div></div></div><aside class="panel"><span class="eyebrow">A journey to remember</span><h2 class="section-title" style="font-size:2rem">From $${t.price.toLocaleString()}</h2><p class="muted">per person \xB7 ${t.dates}</p><label>Preferred travel date<input class="form-control" type="date" id="travel-date" min="${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}" style="width:100%;margin:8px 0"></label><label>Guests<select class="form-control" id="guest-count" style="width:100%;margin:8px 0"><option>2</option><option>1</option><option>3</option><option>4</option><option>5</option></select></label><button class="btn btn-gold" id="reserve-trip" style="width:100%;margin-top:14px">Reserve this journey \u2192</button><p class="muted" style="font-size:.8rem;text-align:center">No payment is taken in this demo.</p><p>\u2605 ${d.rating} \xB7 ${d.reviews} reviews</p></aside></div></main>`);
+      const trip = trips.find((item) => item.id === new URLSearchParams(location.search).get("id")) || trips[0];
+      const destination = destinations.find((item) => item.id === trip.destinationId);
+      shell(`
+        <main class="container trip-details-page">
+            <header class="page-head">
+                <span class="eyebrow">${esc2(destination.name)} \xB7 ${trip.duration} days</span>
+                <h1 class="section-title">${esc2(trip.title)}</h1>
+                <p class="muted">A carefully considered journey in ${esc2(destination.country)}.</p>
+            </header>
+            <div class="two-col trip-layout">
+                <div class="trip-content">
+                    <div class="gallery trip-gallery">
+                        ${[trip.image, destination.image, "photo-1500530855697-b586d89ba3ee"].map((asset, index) => image(asset, `${trip.title} scene ${index + 1}`, 900)).join("")}
+                    </div>
+                    <section class="trip-overview" aria-labelledby="trip-overview-title">
+                        <span class="eyebrow">A sense of place</span>
+                        <h2 class="section-title" id="trip-overview-title">The journey</h2>
+                        <p class="muted">${esc2(destination.description)}</p>
+                    </section>
+                    <section class="trip-itinerary" aria-labelledby="trip-itinerary-title">
+                        <div class="trip-section-heading">
+                            <div>
+                                <span class="eyebrow">Your days, thoughtfully planned</span>
+                                <h3 id="trip-itinerary-title">Day by day</h3>
+                            </div>
+                            <span class="trip-duration">${trip.duration} days</span>
+                        </div>
+                        <ol class="itinerary">
+                            ${trip.itinerary.map((stop, index) => `
+                                <li><span class="itinerary-day">Day ${String(index + 1).padStart(2, "0")}</span><span>${esc2(stop)}</span></li>
+                            `).join("")}
+                        </ol>
+                    </section>
+                    <div class="trip-inclusions" aria-label="Journey inclusions">
+                        <section class="trip-inclusion-card">
+                            <h3>Included</h3>
+                            <ul class="check-list">${trip.included.map((item) => `<li>${esc2(item)}</li>`).join("")}</ul>
+                        </section>
+                        <section class="trip-inclusion-card">
+                            <h3>Not included</h3>
+                            <ul>${trip.excluded.map((item) => `<li>${esc2(item)}</li>`).join("")}</ul>
+                        </section>
+                    </div>
+                </div>
+                <aside class="panel trip-booking-panel">
+                    <span class="eyebrow">A journey to remember</span>
+                    <h2 class="section-title" style="font-size:2rem">From $${trip.price.toLocaleString()}</h2>
+                    <p class="muted">per person \xB7 ${esc2(trip.dates)}</p>
+                    <label>Preferred travel date
+                        <input class="form-control" type="date" id="travel-date" min="${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}" style="width:100%;margin:8px 0">
+                    </label>
+                    <label>Guests
+                        <select class="form-control" id="guest-count" style="width:100%;margin:8px 0">
+                            <option>2</option><option>1</option><option>3</option><option>4</option><option>5</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-gold" id="reserve-trip" style="width:100%;margin-top:14px">Reserve this journey \u2192</button>
+                    <p class="muted" style="font-size:.8rem;text-align:center">No payment is taken in this demo.</p>
+                    <p>\u2605 ${destination.rating} \xB7 ${destination.reviews} reviews</p>
+                </aside>
+            </div>
+        </main>`);
       $("#reserve-trip").addEventListener("click", () => {
-        const q = new URLSearchParams({ trip: t.id, guests: $("#guest-count").value });
-        if ($("#travel-date").value) q.set("date", $("#travel-date").value);
-        location.href = link("checkout.html") + "?" + q;
+        const query = new URLSearchParams({ trip: trip.id, guests: $("#guest-count").value });
+        if ($("#travel-date").value) query.set("date", $("#travel-date").value);
+        location.href = link("checkout.html") + "?" + query;
       });
     }
     function authPage(register = false) {

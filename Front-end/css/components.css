@@ -1,1 +1,13 @@
 .tag{display:inline-block;padding:5px 10px;background:#c5a46d22;color:#a17d43;border-radius:30px;font-size:.72rem}.hidden{display:none!important}.stack>*+*{margin-top:14px}.notice{padding:14px;background:#c5a46d22;border-left:3px solid var(--gold)}.password-wrap{position:relative}.password-wrap button{position:absolute;right:8px;top:7px;border:0;background:transparent;color:var(--muted)}
+
+button.btn-outline{border-color:var(--line);background:var(--surface);color:var(--ink)}
+button.btn-outline:hover{border-color:var(--gold);background:var(--ivory);color:var(--forest)}
+body.dark button.btn-outline{background:var(--dark-surface);color:#f6f3ec}
+body.dark button.btn-outline:hover{border-color:var(--gold);background:#263a30;color:#f6f3ec}
+
+select{color-scheme:light}
+body.dark select{color-scheme:dark}
+select option{background:#fff;color:#17211c}
+select option:checked{background:#c5a46d;color:#14251f}
+body.dark select option{background:#1d2b24;color:#f6f3ec}
+body.dark select option:checked{background:#c5a46d;color:#14251f}
