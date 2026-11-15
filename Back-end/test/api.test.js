@@ -259,3 +259,81 @@ test("upcoming bookings can be edited and their totals are recalculated", async 
     await server.close();
   }
 });
+
+test("past travel dates are completed before returning the account snapshot", async () => {
+  const previousAuthBaseUrl = process.env.NEON_AUTH_BASE_URL;
+  const previousJwksUrl = process.env.NEON_AUTH_JWKS_URL;
+  const originalFetch = globalThis.fetch;
+  const authOrigin = "https://travelx-auth.example.test";
+  const jwksUrl = "https://travelx-auth.example.test/jwks";
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const jwk = { ...publicKey.export({ format: "jwk" }), kid: "booking-status-test", alg: "EdDSA" };
+  const userId = "d9428888-122b-4b13-8b1e-1a1b5b123456";
+  const header = Buffer.from(JSON.stringify({ alg: "EdDSA", kid: jwk.kid })).toString("base64url");
+  const claims = Buffer.from(JSON.stringify({
+    sub: userId,
+    name: "Test Traveller",
+    email: "traveller@example.test",
+    iss: authOrigin,
+    aud: authOrigin,
+    exp: Math.floor(Date.now() / 1000) + 300
+  })).toString("base64url");
+  const content = `${header}.${claims}`;
+  const token = `${content}.${sign(null, Buffer.from(content), privateKey).toString("base64url")}`;
+  let completionUpdateRan = false;
+  const server = await startServer({
+    query: async (sql, values) => {
+      if (sql.includes("INSERT INTO public.users")) return { rowCount: 1, rows: [] };
+      if (sql.includes("UPDATE public.bookings") && sql.includes("travel_date < CURRENT_DATE")) {
+        completionUpdateRan = true;
+        assert.deepEqual(values, [userId]);
+        assert.match(sql, /status IN \('pending', 'confirmed'\)/);
+        return { rowCount: 2, rows: [] };
+      }
+      if (sql.includes("SELECT id, full_name AS name")) {
+        return { rows: [{ id: userId, name: "Test Traveller", email: "traveller@example.test" }] };
+      }
+      if (sql.includes("SELECT destination_id AS id")) return { rows: [] };
+      if (sql.includes("SELECT bookings.reference AS ref")) {
+        assert.equal(completionUpdateRan, true);
+        return {
+          rows: [
+            { ref: "TX-OLD-1", status: "Completed", total: "100.00" },
+            { ref: "TX-OLD-2", status: "Completed", total: "100.00" },
+            { ref: "TX-FUTURE-1", status: "Upcoming", total: "100.00" },
+            { ref: "TX-FUTURE-2", status: "Upcoming", total: "100.00" }
+          ]
+        };
+      }
+      throw new Error(`Unexpected database query: ${sql}`);
+    }
+  });
+
+  process.env.NEON_AUTH_BASE_URL = authOrigin;
+  process.env.NEON_AUTH_JWKS_URL = jwksUrl;
+  globalThis.fetch = async (input, options) => {
+    if (String(input) === jwksUrl) {
+      return new Response(JSON.stringify({ keys: [jwk] }), {
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return originalFetch(input, options);
+  };
+
+  try {
+    const response = await originalFetch(`${server.baseUrl}/api/private/session`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    assert.equal(response.status, 200);
+    const snapshot = await response.json();
+    assert.equal(snapshot.bookings.filter(booking => booking.status === "Completed").length, 2);
+    assert.equal(snapshot.bookings.filter(booking => booking.status === "Upcoming").length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousAuthBaseUrl === undefined) delete process.env.NEON_AUTH_BASE_URL;
+    else process.env.NEON_AUTH_BASE_URL = previousAuthBaseUrl;
+    if (previousJwksUrl === undefined) delete process.env.NEON_AUTH_JWKS_URL;
+    else process.env.NEON_AUTH_JWKS_URL = previousJwksUrl;
+    await server.close();
+  }
+});

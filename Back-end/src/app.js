@@ -77,6 +77,16 @@ export function createApp(database, configuredOrigins = process.env.FRONTEND_ORI
   });
 
   async function getAccountSnapshot(userId) {
+    // A booking becomes completed once its travel date has passed. Persist this
+    // transition so the dashboard, bookings list, and globe all agree.
+    await database.query(`
+      UPDATE public.bookings
+      SET status = 'completed', updated_at = now()
+      WHERE user_id = $1
+        AND status IN ('pending', 'confirmed')
+        AND travel_date < CURRENT_DATE
+    `, [userId]);
+
     const [userResult, favoritesResult, bookingsResult] = await Promise.all([
       database.query(`
         SELECT id, full_name AS name, email, phone, country,
