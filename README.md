@@ -28,7 +28,9 @@ The root `vercel.json` builds the static site and deploys the Express API as a
 Vercel Node.js Function. In Vercel, import the `ASaber33/TravelX` repository,
 keep the Root Directory as `./`, and use the Other framework preset. The
 configuration file supplies the build settings; do not override them in the
-Vercel dashboard.
+Vercel dashboard. The deployment installs only the API's production packages
+and reuses the already-bundled frontend script, avoiding the large local build
+toolchain.
 
 Add these environment variables in Vercel for Production and Preview, using
 the values from the intended Neon branch:
