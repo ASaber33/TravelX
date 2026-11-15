@@ -28459,13 +28459,25 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
   });
 
   // ../Front-end/js/runtime.js
+  function errorMessage(error61, fallback = "Something went wrong. Please try again.") {
+    const candidates = [
+      typeof error61 === "string" ? error61 : null,
+      error61?.message,
+      error61?.error?.message,
+      typeof error61?.error === "string" ? error61.error : null
+    ];
+    const message = candidates.find(
+      (value) => typeof value === "string" && value.trim() && value.trim() !== "[object Object]"
+    );
+    return message?.trim() || fallback;
+  }
   async function getApiData(path) {
     const response = await fetch(new URL(path, `${API_BASE_URL}/`), {
       headers: { Accept: "application/json" }
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(payload.error || `API request failed (${response.status}).`);
+      throw new Error(errorMessage(payload?.error, `API request failed (${response.status}).`));
     }
     return payload;
   }
@@ -28476,6 +28488,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
           throw new Error("Neon Auth is not configured for this branch.");
         }
         return createAuthClient2(authBaseUrl);
+      }).catch((error61) => {
+        throw new Error(errorMessage(error61, "Could not connect to Neon Auth."));
       });
     }
     return authClientPromise;
@@ -28510,7 +28524,9 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     if (!publicRequest) {
       const auth = await getAuthClient();
       const sessionResult = await auth.getSession();
-      if (sessionResult.error) throw new Error(sessionResult.error.message || "Could not load the active session.");
+      if (sessionResult.error) {
+        throw new Error(errorMessage(sessionResult.error, "Could not load the active session."));
+      }
       const token = sessionResult.data?.session?.token;
       if (!token) throw new Error("Your session has expired. Please sign in again.");
       headers.Authorization = `Bearer ${token}`;
@@ -28521,7 +28537,9 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       ...body === void 0 ? {} : { body: JSON.stringify(body) }
     });
     const payload = response.status === 204 ? null : await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload?.error || `API request failed (${response.status}).`);
+    if (!response.ok) {
+      throw new Error(errorMessage(payload?.error, `API request failed (${response.status}).`));
+    }
     return payload;
   }
   async function saveFavorite(destinationId, saved) {
@@ -28601,14 +28619,20 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
   function renderStartupError(error61) {
     console.error("TravelX startup failed:", error61);
     const main = document.createElement("main");
-    main.style.cssText = "max-width:680px;margin:12vh auto;padding:24px;font:16px/1.6 system-ui";
+    main.style.cssText = "max-width:680px;margin:12vh auto;padding:32px;border:1px solid #d6c49d;border-radius:18px;background:#f5f1e8;color:#14251f;font:16px/1.6 system-ui";
     const heading = document.createElement("h1");
-    heading.textContent = "TravelX could not connect";
+    heading.textContent = "TravelX is temporarily unavailable";
     const details = document.createElement("p");
-    details.textContent = error61.message;
+    details.setAttribute("role", "alert");
+    details.textContent = errorMessage(error61, "The service could not be reached. Please try again.");
     const instruction = document.createElement("p");
-    instruction.textContent = "Start the TravelX server with npm start, then reload this page.";
-    main.append(heading, details, instruction);
+    instruction.textContent = "Check your connection, then reload TravelX to try again.";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "Reload TravelX";
+    retry.style.cssText = "border:0;border-radius:6px;background:#c8a665;color:#14251f;padding:12px 20px;font:inherit;font-weight:600;cursor:pointer";
+    retry.addEventListener("click", () => location.reload());
+    main.append(heading, details, instruction, retry);
     document.body.replaceChildren(main);
   }
   async function bootstrapTravelX() {
@@ -28671,54 +28695,70 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     }
   }
   async function authenticate(formData, register) {
-    const auth = await getAuthClient();
-    const email3 = String(formData.get("email")).trim().toLowerCase();
-    const password = String(formData.get("password"));
-    const result = register ? await auth.signUp.email({
-      name: String(formData.get("name")).trim(),
-      email: email3,
-      password
-    }) : await auth.signIn.email({ email: email3, password });
-    if (result.error) {
-      throw new Error(result.error.message || "Authentication failed.");
-    }
-    const sessionResult = await auth.getSession();
-    if (sessionResult.error) {
-      throw new Error(sessionResult.error.message || "Could not load the new session.");
-    }
-    const user = sessionResult.data?.user || result.data?.user || null;
-    if (!user || !sessionResult.data?.session) {
-      if (register) {
-        return { verificationRequired: true };
+    try {
+      const auth = await getAuthClient();
+      const email3 = String(formData.get("email")).trim().toLowerCase();
+      const password = String(formData.get("password"));
+      const result = register ? await auth.signUp.email({
+        name: String(formData.get("name")).trim(),
+        email: email3,
+        password
+      }) : await auth.signIn.email({ email: email3, password });
+      if (result?.error) {
+        throw new Error(errorMessage(result.error, "Authentication failed."));
       }
-      throw new Error("Sign-in completed without an active session. Check browser cookie settings and retry.");
+      const sessionResult = await auth.getSession();
+      if (sessionResult.error) {
+        throw new Error(errorMessage(sessionResult.error, "Could not load the new session."));
+      }
+      const user = sessionResult.data?.user || result.data?.user || null;
+      if (!user || !sessionResult.data?.session) {
+        if (register) {
+          return { verificationRequired: true };
+        }
+        throw new Error("Sign-in completed without an active session. Check browser cookie settings and retry.");
+      }
+      const snapshot = await apiRequest("/api/private/session");
+      syncLocalUser(user, snapshot);
+      return { user: snapshot.user };
+    } catch (error61) {
+      throw new Error(errorMessage(error61, "Authentication failed. Please try again."));
     }
-    const snapshot = await apiRequest("/api/private/session");
-    syncLocalUser(user, snapshot);
-    return { user: snapshot.user };
   }
   async function sendPasswordReset(email3) {
-    const auth = await getAuthClient();
-    const redirectTo = new URL(linkPageUrl("reset-password.html"), document.baseURI).href;
-    const result = await auth.requestPasswordReset({
-      email: String(email3).trim().toLowerCase(),
-      redirectTo,
-      fetchOptions: { throw: true }
-    });
-    if (result?.error) throw new Error(result.error.message || "Could not send the password reset email.");
+    try {
+      const auth = await getAuthClient();
+      const redirectTo = new URL(linkPageUrl("reset-password.html"), document.baseURI).href;
+      const result = await auth.requestPasswordReset({
+        email: String(email3).trim().toLowerCase(),
+        redirectTo,
+        fetchOptions: { throw: true }
+      });
+      if (result?.error) {
+        throw new Error(errorMessage(result.error, "Could not send the password reset email."));
+      }
+    } catch (error61) {
+      throw new Error(errorMessage(error61, "Could not send the password reset email."));
+    }
   }
   function linkPageUrl(pageName) {
     const pagesPath = location.pathname.match(/^(.*\/pages\/)/)?.[1];
     return pagesPath ? `${pagesPath}${pageName}` : new URL(`pages/${pageName}`, document.baseURI).href;
   }
   async function completePasswordReset(token, newPassword) {
-    const auth = await getAuthClient();
-    const result = await auth.resetPassword({
-      newPassword,
-      token,
-      fetchOptions: { throw: true }
-    });
-    if (result?.error) throw new Error(result.error.message || "This reset link is invalid or expired.");
+    try {
+      const auth = await getAuthClient();
+      const result = await auth.resetPassword({
+        newPassword,
+        token,
+        fetchOptions: { throw: true }
+      });
+      if (result?.error) {
+        throw new Error(errorMessage(result.error, "This reset link is invalid or expired."));
+      }
+    } catch (error61) {
+      throw new Error(errorMessage(error61, "This reset link is invalid or expired."));
+    }
   }
   async function signOutTravelX() {
     try {
@@ -29596,6 +29636,28 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
   }
 
   // ../Front-end/js/globe.js?v=earth-3d-20261114-v2
+  function addPinImage(map2, imageId, color) {
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="80" viewBox="0 0 64 80">
+            <path d="M32 3C16.5 3 4 15.4 4 30.6 4 49 32 77 32 77s28-28 28-46.4C60 15.4 47.5 3 32 3Z" fill="#14251f" opacity=".96"/>
+            <path d="M32 2C16.5 2 4 14.4 4 29.6 4 48 32 76 32 76s28-28 28-46.4C60 14.4 47.5 2 32 2Z" fill="${color}" stroke="#14251f" stroke-width="3"/>
+            <circle cx="32" cy="29" r="12" fill="#14251f"/>
+            <circle cx="32" cy="29" r="7" fill="#f5f1e8"/>
+        </svg>`;
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        try {
+          if (!map2.hasImage(imageId)) map2.addImage(imageId, image, { pixelRatio: 2 });
+          resolve();
+        } catch (error61) {
+          reject(error61);
+        }
+      };
+      image.onerror = () => reject(new Error("Could not load the journey pin icons."));
+      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    });
+  }
   function popupContent(visit2) {
     const content = document.createElement("div");
     content.className = "journey-map-popup";
@@ -29679,63 +29741,95 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       };
       renderJourneyList(document.querySelector("#visited-route-list"), visited, showVisit);
       renderJourneyList(document.querySelector("#upcoming-route-list"), upcoming, showVisit);
-      map2.on("style.load", () => {
-        map2.setProjection({ type: "globe" });
-        map2.setFog({});
-        map2.addSource("journey-stops", {
-          type: "geojson",
-          data: {
-            type: "FeatureCollection",
-            features: markers.map((visit2) => ({
-              type: "Feature",
-              properties: {
-                id: visit2.destinationId,
-                name: visit2.destination.name,
-                country: visit2.destination.country,
-                state: visit2.state
-              },
-              geometry: {
-                type: "Point",
-                // GeoJSON coordinates are always [longitude, latitude].
-                coordinates: visit2.coordinates
-              }
-            }))
+      map2.on("style.load", async () => {
+        try {
+          map2.setProjection({ type: "globe" });
+          map2.setFog({});
+          map2.addSource("journey-stops", {
+            type: "geojson",
+            data: {
+              type: "FeatureCollection",
+              features: markers.map((visit2) => ({
+                type: "Feature",
+                properties: {
+                  id: visit2.destinationId,
+                  name: visit2.destination.name,
+                  country: visit2.destination.country,
+                  state: visit2.state
+                },
+                geometry: {
+                  type: "Point",
+                  // GeoJSON coordinates are always [longitude, latitude].
+                  coordinates: visit2.coordinates
+                }
+              }))
+            }
+          });
+          await Promise.all([
+            addPinImage(map2, "journey-pin-visited", "#69d4a0"),
+            addPinImage(map2, "journey-pin-upcoming", "#f0bd62")
+          ]);
+          map2.addLayer({
+            id: "journey-stops-halo",
+            type: "circle",
+            source: "journey-stops",
+            paint: {
+              "circle-radius": 13,
+              "circle-color": ["match", ["get", "state"], "visited", "#69d4a0", "#f0bd62"],
+              "circle-opacity": 0.34,
+              "circle-blur": 0.2
+            }
+          });
+          map2.addLayer({
+            id: "journey-stops-marker",
+            type: "symbol",
+            source: "journey-stops",
+            layout: {
+              "icon-image": ["match", ["get", "state"], "visited", "journey-pin-visited", "journey-pin-upcoming"],
+              "icon-size": 0.72,
+              "icon-anchor": "bottom",
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true
+            }
+          });
+          map2.addLayer({
+            id: "journey-stops-labels",
+            type: "symbol",
+            source: "journey-stops",
+            minzoom: 4.5,
+            layout: {
+              "text-field": ["get", "name"],
+              "text-size": 12,
+              "text-anchor": "top",
+              "text-offset": [0, 1.6],
+              "text-max-width": 10,
+              "text-allow-overlap": false
+            },
+            paint: {
+              "text-color": "#f5f1e8",
+              "text-halo-color": "#14251f",
+              "text-halo-width": 2
+            }
+          });
+          map2.on("click", "journey-stops-marker", (event) => {
+            const feature = event.features?.[0];
+            if (!feature) return;
+            const visit2 = markers.find((item) => item.destinationId === feature.properties.id);
+            if (visit2) showVisit(visit2);
+          });
+          map2.on("mouseenter", "journey-stops-marker", () => {
+            map2.getCanvas().style.cursor = "pointer";
+          });
+          map2.on("mouseleave", "journey-stops-marker", () => {
+            map2.getCanvas().style.cursor = "";
+          });
+        } catch (error61) {
+          console.error("Journey globe pins could not be displayed:", error61);
+          if (statusNote) {
+            statusNote.hidden = false;
+            statusNote.textContent = "The journey globe could not display its pins. Reload the page to try again.";
           }
-        });
-        map2.addLayer({
-          id: "journey-stops-halo",
-          type: "circle",
-          source: "journey-stops",
-          paint: {
-            "circle-radius": 13,
-            "circle-color": ["match", ["get", "state"], "visited", "#69d4a0", "#f0bd62"],
-            "circle-opacity": 0.34,
-            "circle-blur": 0.2
-          }
-        });
-        map2.addLayer({
-          id: "journey-stops-marker",
-          type: "circle",
-          source: "journey-stops",
-          paint: {
-            "circle-radius": 7,
-            "circle-color": ["match", ["get", "state"], "visited", "#69d4a0", "#f0bd62"],
-            "circle-stroke-color": "#10251e",
-            "circle-stroke-width": 2
-          }
-        });
-        map2.on("click", "journey-stops-marker", (event) => {
-          const feature = event.features?.[0];
-          if (!feature) return;
-          const visit2 = markers.find((item) => item.destinationId === feature.properties.id);
-          if (visit2) showVisit(visit2);
-        });
-        map2.on("mouseenter", "journey-stops-marker", () => {
-          map2.getCanvas().style.cursor = "pointer";
-        });
-        map2.on("mouseleave", "journey-stops-marker", () => {
-          map2.getCanvas().style.cursor = "";
-        });
+        }
       });
       document.querySelectorAll("[data-globe-reset]").forEach((button) => button.addEventListener("click", () => {
         map2.flyTo({ center: [20, 22], zoom: 1.7, pitch: 0, bearing: 0, speed: 1.1 });
@@ -29880,14 +29974,14 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       const title = register ? "Create your account" : "Welcome back";
       shell(`<main class="form-page auth-page"><section class="form-photo" aria-hidden="true"><div class="auth-photo-copy"><span>TRAVELX PRIVATE</span><strong>Travel begins<br>with a feeling.</strong><small>Made for the way you want to feel.</small></div></section><div class="form-wrap"><form class="form-box" id="auth-form"><div class="auth-card-head"><span class="eyebrow">${register ? "YOUR TRAVELX ACCOUNT" : "WELCOME TO TRAVELX"}</span><span>01</span></div><h1>${title}</h1><p class="muted">${register ? "Start planning journeys that feel like yours." : "Sign in to continue your journey."}</p><p id="auth-error" class="muted" role="alert" aria-live="polite" hidden></p>${register ? `<label>Full name<input class="form-control" name="name" required autocomplete="name" placeholder="Your full name"></label>` : ""}<label>Email address<input class="form-control" name="email" type="email" required autocomplete="email" placeholder="you@example.com"></label><label>Password<div class="password-wrap"><input class="form-control" name="password" type="password" required minlength="${register ? 8 : 1}" autocomplete="${register ? "new-password" : "current-password"}" placeholder="${register ? "At least 8 characters" : "Your password"}"><button type="button" class="show-password">Show</button></div></label>${register ? `<label>Confirm password<input class="form-control" name="confirm" type="password" required placeholder="Repeat your password"></label>` : `<div class="auth-options"><label><input name="remember" type="checkbox"> Remember me</label><a class="muted" href="${link("forgot-password.html")}" id="forgot">Forgot password?</a></div>`}<button class="btn btn-gold" type="submit">${register ? "Create account" : "Log in"} <span>\u2197</span></button><p class="auth-switch muted">${register ? "Already have an account?" : "New to TravelX?"} <a href="${link(register ? "login.html" : "register.html")}">${register ? "Log in" : "Create an account"}</a></p></form></div></main>`);
       const form = $("#auth-form");
-      const errorMessage = $("#auth-error");
+      const errorMessage2 = $("#auth-error");
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        errorMessage.hidden = true;
+        errorMessage2.hidden = true;
         const formData = new FormData(form);
         if (register && formData.get("password") !== formData.get("confirm")) {
-          errorMessage.textContent = "Passwords do not match.";
-          errorMessage.hidden = false;
+          errorMessage2.textContent = "Passwords do not match.";
+          errorMessage2.hidden = false;
           return;
         }
         const submitButton = form.querySelector('button[type="submit"]');
@@ -29895,14 +29989,14 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         try {
           const result = await authenticate(formData, register);
           if (result.verificationRequired) {
-            errorMessage.textContent = "Account created. Verify your email, then sign in.";
-            errorMessage.hidden = false;
+            errorMessage2.textContent = "Account created. Verify your email, then sign in.";
+            errorMessage2.hidden = false;
             return;
           }
           location.href = link("dashboard.html");
         } catch (error61) {
-          errorMessage.textContent = error61.message || "Authentication failed. Please try again.";
-          errorMessage.hidden = false;
+          errorMessage2.textContent = error61.message || "Authentication failed. Please try again.";
+          errorMessage2.hidden = false;
         } finally {
           submitButton.disabled = false;
         }

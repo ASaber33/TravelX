@@ -3,6 +3,30 @@ import { trips } from '../data/trips.js';
 import { read } from './storage.js';
 import { buildJourneyMapData } from './journey-routes.mjs';
 
+function addPinImage(map, imageId, color) {
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="80" viewBox="0 0 64 80">
+            <path d="M32 3C16.5 3 4 15.4 4 30.6 4 49 32 77 32 77s28-28 28-46.4C60 15.4 47.5 3 32 3Z" fill="#14251f" opacity=".96"/>
+            <path d="M32 2C16.5 2 4 14.4 4 29.6 4 48 32 76 32 76s28-28 28-46.4C60 14.4 47.5 2 32 2Z" fill="${color}" stroke="#14251f" stroke-width="3"/>
+            <circle cx="32" cy="29" r="12" fill="#14251f"/>
+            <circle cx="32" cy="29" r="7" fill="#f5f1e8"/>
+        </svg>`;
+
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => {
+            try {
+                if (!map.hasImage(imageId)) map.addImage(imageId, image, { pixelRatio: 2 });
+                resolve();
+            } catch (error) {
+                reject(error);
+            }
+        };
+        image.onerror = () => reject(new Error('Could not load the journey pin icons.'));
+        image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    });
+}
+
 function popupContent(visit) {
     const content = document.createElement('div');
     content.className = 'journey-map-popup';
@@ -101,59 +125,91 @@ export async function initJourneyGlobe(bookings = read().bookings, loadError = '
         renderJourneyList(document.querySelector('#visited-route-list'), visited, showVisit);
         renderJourneyList(document.querySelector('#upcoming-route-list'), upcoming, showVisit);
 
-        map.on('style.load', () => {
-            map.setProjection({ type: 'globe' });
-            map.setFog({});
-            map.addSource('journey-stops', {
-                type: 'geojson',
-                data: {
-                    type: 'FeatureCollection',
-                    features: markers.map(visit => ({
-                        type: 'Feature',
-                        properties: {
-                            id: visit.destinationId,
-                            name: visit.destination.name,
-                            country: visit.destination.country,
-                            state: visit.state
-                        },
-                        geometry: {
-                            type: 'Point',
-                            // GeoJSON coordinates are always [longitude, latitude].
-                            coordinates: visit.coordinates
-                        }
-                    }))
+        map.on('style.load', async () => {
+            try {
+                map.setProjection({ type: 'globe' });
+                map.setFog({});
+                map.addSource('journey-stops', {
+                    type: 'geojson',
+                    data: {
+                        type: 'FeatureCollection',
+                        features: markers.map(visit => ({
+                            type: 'Feature',
+                            properties: {
+                                id: visit.destinationId,
+                                name: visit.destination.name,
+                                country: visit.destination.country,
+                                state: visit.state
+                            },
+                            geometry: {
+                                type: 'Point',
+                                // GeoJSON coordinates are always [longitude, latitude].
+                                coordinates: visit.coordinates
+                            }
+                        }))
+                    }
+                });
+                await Promise.all([
+                    addPinImage(map, 'journey-pin-visited', '#69d4a0'),
+                    addPinImage(map, 'journey-pin-upcoming', '#f0bd62')
+                ]);
+                map.addLayer({
+                    id: 'journey-stops-halo',
+                    type: 'circle',
+                    source: 'journey-stops',
+                    paint: {
+                        'circle-radius': 13,
+                        'circle-color': ['match', ['get', 'state'], 'visited', '#69d4a0', '#f0bd62'],
+                        'circle-opacity': 0.34,
+                        'circle-blur': 0.2
+                    }
+                });
+                map.addLayer({
+                    id: 'journey-stops-marker',
+                    type: 'symbol',
+                    source: 'journey-stops',
+                    layout: {
+                        'icon-image': ['match', ['get', 'state'], 'visited', 'journey-pin-visited', 'journey-pin-upcoming'],
+                        'icon-size': 0.72,
+                        'icon-anchor': 'bottom',
+                        'icon-allow-overlap': true,
+                        'icon-ignore-placement': true
+                    }
+                });
+                map.addLayer({
+                    id: 'journey-stops-labels',
+                    type: 'symbol',
+                    source: 'journey-stops',
+                    minzoom: 4.5,
+                    layout: {
+                        'text-field': ['get', 'name'],
+                        'text-size': 12,
+                        'text-anchor': 'top',
+                        'text-offset': [0, 1.6],
+                        'text-max-width': 10,
+                        'text-allow-overlap': false
+                    },
+                    paint: {
+                        'text-color': '#f5f1e8',
+                        'text-halo-color': '#14251f',
+                        'text-halo-width': 2
+                    }
+                });
+                map.on('click', 'journey-stops-marker', event => {
+                    const feature = event.features?.[0];
+                    if (!feature) return;
+                    const visit = markers.find(item => item.destinationId === feature.properties.id);
+                    if (visit) showVisit(visit);
+                });
+                map.on('mouseenter', 'journey-stops-marker', () => { map.getCanvas().style.cursor = 'pointer'; });
+                map.on('mouseleave', 'journey-stops-marker', () => { map.getCanvas().style.cursor = ''; });
+            } catch (error) {
+                console.error('Journey globe pins could not be displayed:', error);
+                if (statusNote) {
+                    statusNote.hidden = false;
+                    statusNote.textContent = 'The journey globe could not display its pins. Reload the page to try again.';
                 }
-            });
-            map.addLayer({
-                id: 'journey-stops-halo',
-                type: 'circle',
-                source: 'journey-stops',
-                paint: {
-                    'circle-radius': 13,
-                    'circle-color': ['match', ['get', 'state'], 'visited', '#69d4a0', '#f0bd62'],
-                    'circle-opacity': 0.34,
-                    'circle-blur': 0.2
-                }
-            });
-            map.addLayer({
-                id: 'journey-stops-marker',
-                type: 'circle',
-                source: 'journey-stops',
-                paint: {
-                    'circle-radius': 7,
-                    'circle-color': ['match', ['get', 'state'], 'visited', '#69d4a0', '#f0bd62'],
-                    'circle-stroke-color': '#10251e',
-                    'circle-stroke-width': 2
-                }
-            });
-            map.on('click', 'journey-stops-marker', event => {
-                const feature = event.features?.[0];
-                if (!feature) return;
-                const visit = markers.find(item => item.destinationId === feature.properties.id);
-                if (visit) showVisit(visit);
-            });
-            map.on('mouseenter', 'journey-stops-marker', () => { map.getCanvas().style.cursor = 'pointer'; });
-            map.on('mouseleave', 'journey-stops-marker', () => { map.getCanvas().style.cursor = ''; });
+            }
         });
 
         document.querySelectorAll('[data-globe-reset]').forEach(button => button.addEventListener('click', () => {

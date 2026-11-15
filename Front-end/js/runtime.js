@@ -9,6 +9,19 @@ const API_BASE_URL = window.TRAVELX_API_URL
         : location.origin);
 let authClientPromise;
 
+function errorMessage(error, fallback = 'Something went wrong. Please try again.') {
+    const candidates = [
+        typeof error === 'string' ? error : null,
+        error?.message,
+        error?.error?.message,
+        typeof error?.error === 'string' ? error.error : null
+    ];
+    const message = candidates.find(value =>
+        typeof value === 'string' && value.trim() && value.trim() !== '[object Object]'
+    );
+    return message?.trim() || fallback;
+}
+
 async function getApiData(path) {
     const response = await fetch(new URL(path, `${API_BASE_URL}/`), {
         headers: { Accept: 'application/json' }
@@ -16,7 +29,7 @@ async function getApiData(path) {
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-        throw new Error(payload.error || `API request failed (${response.status}).`);
+        throw new Error(errorMessage(payload?.error, `API request failed (${response.status}).`));
     }
 
     return payload;
@@ -30,6 +43,8 @@ async function getAuthClient() {
             }
 
             return createAuthClient(authBaseUrl);
+        }).catch(error => {
+            throw new Error(errorMessage(error, 'Could not connect to Neon Auth.'));
         });
     }
 
@@ -72,7 +87,9 @@ async function apiRequest(path, { method = 'GET', body, publicRequest = false } 
     if (!publicRequest) {
         const auth = await getAuthClient();
         const sessionResult = await auth.getSession();
-        if (sessionResult.error) throw new Error(sessionResult.error.message || 'Could not load the active session.');
+        if (sessionResult.error) {
+            throw new Error(errorMessage(sessionResult.error, 'Could not load the active session.'));
+        }
         const token = sessionResult.data?.session?.token;
         if (!token) throw new Error('Your session has expired. Please sign in again.');
         headers.Authorization = `Bearer ${token}`;
@@ -85,7 +102,9 @@ async function apiRequest(path, { method = 'GET', body, publicRequest = false } 
     });
     const payload = response.status === 204 ? null : await response.json().catch(() => ({}));
 
-    if (!response.ok) throw new Error(payload?.error || `API request failed (${response.status}).`);
+    if (!response.ok) {
+        throw new Error(errorMessage(payload?.error, `API request failed (${response.status}).`));
+    }
     return payload;
 }
 
@@ -181,14 +200,20 @@ function pageUrl(pageName) {
 function renderStartupError(error) {
     console.error('TravelX startup failed:', error);
     const main = document.createElement('main');
-    main.style.cssText = 'max-width:680px;margin:12vh auto;padding:24px;font:16px/1.6 system-ui';
+    main.style.cssText = 'max-width:680px;margin:12vh auto;padding:32px;border:1px solid #d6c49d;border-radius:18px;background:#f5f1e8;color:#14251f;font:16px/1.6 system-ui';
     const heading = document.createElement('h1');
-    heading.textContent = 'TravelX could not connect';
+    heading.textContent = 'TravelX is temporarily unavailable';
     const details = document.createElement('p');
-    details.textContent = error.message;
+    details.setAttribute('role', 'alert');
+    details.textContent = errorMessage(error, 'The service could not be reached. Please try again.');
     const instruction = document.createElement('p');
-    instruction.textContent = 'Start the TravelX server with npm start, then reload this page.';
-    main.append(heading, details, instruction);
+    instruction.textContent = 'Check your connection, then reload TravelX to try again.';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.textContent = 'Reload TravelX';
+    retry.style.cssText = 'border:0;border-radius:6px;background:#c8a665;color:#14251f;padding:12px 20px;font:inherit;font-weight:600;cursor:pointer';
+    retry.addEventListener('click', () => location.reload());
+    main.append(heading, details, instruction, retry);
     document.body.replaceChildren(main);
 }
 
@@ -260,49 +285,59 @@ export async function bootstrapTravelX() {
 }
 
 export async function authenticate(formData, register) {
-    const auth = await getAuthClient();
-    const email = String(formData.get('email')).trim().toLowerCase();
-    const password = String(formData.get('password'));
-    const result = register
-        ? await auth.signUp.email({
-            name: String(formData.get('name')).trim(),
-            email,
-            password
-        })
-        : await auth.signIn.email({ email, password });
+    try {
+        const auth = await getAuthClient();
+        const email = String(formData.get('email')).trim().toLowerCase();
+        const password = String(formData.get('password'));
+        const result = register
+            ? await auth.signUp.email({
+                name: String(formData.get('name')).trim(),
+                email,
+                password
+            })
+            : await auth.signIn.email({ email, password });
 
-    if (result.error) {
-        throw new Error(result.error.message || 'Authentication failed.');
-    }
-
-    const sessionResult = await auth.getSession();
-    if (sessionResult.error) {
-        throw new Error(sessionResult.error.message || 'Could not load the new session.');
-    }
-
-    const user = sessionResult.data?.user || result.data?.user || null;
-    if (!user || !sessionResult.data?.session) {
-        if (register) {
-            return { verificationRequired: true };
+        if (result?.error) {
+            throw new Error(errorMessage(result.error, 'Authentication failed.'));
         }
 
-        throw new Error('Sign-in completed without an active session. Check browser cookie settings and retry.');
-    }
+        const sessionResult = await auth.getSession();
+        if (sessionResult.error) {
+            throw new Error(errorMessage(sessionResult.error, 'Could not load the new session.'));
+        }
 
-    const snapshot = await apiRequest('/api/private/session');
-    syncLocalUser(user, snapshot);
-    return { user: snapshot.user };
+        const user = sessionResult.data?.user || result.data?.user || null;
+        if (!user || !sessionResult.data?.session) {
+            if (register) {
+                return { verificationRequired: true };
+            }
+
+            throw new Error('Sign-in completed without an active session. Check browser cookie settings and retry.');
+        }
+
+        const snapshot = await apiRequest('/api/private/session');
+        syncLocalUser(user, snapshot);
+        return { user: snapshot.user };
+    } catch (error) {
+        throw new Error(errorMessage(error, 'Authentication failed. Please try again.'));
+    }
 }
 
 export async function sendPasswordReset(email) {
-    const auth = await getAuthClient();
-    const redirectTo = new URL(linkPageUrl('reset-password.html'), document.baseURI).href;
-    const result = await auth.requestPasswordReset({
-        email: String(email).trim().toLowerCase(),
-        redirectTo,
-        fetchOptions: { throw: true }
-    });
-    if (result?.error) throw new Error(result.error.message || 'Could not send the password reset email.');
+    try {
+        const auth = await getAuthClient();
+        const redirectTo = new URL(linkPageUrl('reset-password.html'), document.baseURI).href;
+        const result = await auth.requestPasswordReset({
+            email: String(email).trim().toLowerCase(),
+            redirectTo,
+            fetchOptions: { throw: true }
+        });
+        if (result?.error) {
+            throw new Error(errorMessage(result.error, 'Could not send the password reset email.'));
+        }
+    } catch (error) {
+        throw new Error(errorMessage(error, 'Could not send the password reset email.'));
+    }
 }
 
 function linkPageUrl(pageName) {
@@ -313,13 +348,19 @@ function linkPageUrl(pageName) {
 }
 
 export async function completePasswordReset(token, newPassword) {
-    const auth = await getAuthClient();
-    const result = await auth.resetPassword({
-        newPassword,
-        token,
-        fetchOptions: { throw: true }
-    });
-    if (result?.error) throw new Error(result.error.message || 'This reset link is invalid or expired.');
+    try {
+        const auth = await getAuthClient();
+        const result = await auth.resetPassword({
+            newPassword,
+            token,
+            fetchOptions: { throw: true }
+        });
+        if (result?.error) {
+            throw new Error(errorMessage(result.error, 'This reset link is invalid or expired.'));
+        }
+    } catch (error) {
+        throw new Error(errorMessage(error, 'This reset link is invalid or expired.'));
+    }
 }
 
 export async function signOutTravelX() {

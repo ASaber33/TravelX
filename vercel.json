@@ -2,5 +2,11 @@
   "version": 2,
   "installCommand": "npm ci --omit=dev --no-audit --no-fund",
   "buildCommand": "npm --prefix Back-end run build:vercel",
-  "outputDirectory": "Back-end/dist"
+  "outputDirectory": "Back-end/dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/handler?path=:path*"
+    }
+  ]
 }
