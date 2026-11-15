@@ -331,10 +331,10 @@ export function createApp(database, configuredOrigins = process.env.FRONTEND_ORI
     try {
       const result = await database.query(`
         DELETE FROM public.bookings
-        WHERE reference = $1 AND user_id = $2 AND status IN ('cancelled', 'completed')
+        WHERE reference = $1 AND user_id = $2 AND status = 'cancelled'
         RETURNING reference
       `, [request.params.reference, request.authUser.sub]);
-      if (!result.rowCount) return response.status(404).json({ error: "Only cancelled or completed bookings can be removed." });
+      if (!result.rowCount) return response.status(404).json({ error: "Only cancelled bookings can be removed." });
       response.sendStatus(204);
     } catch (error) {
       next(error);

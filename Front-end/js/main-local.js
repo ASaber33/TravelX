@@ -30175,7 +30175,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         const destination = destinations.find((item) => item.id === trip.destinationId);
         const cancelled = booking.status === "Cancelled";
         const editable = booking.status === "Upcoming";
-        const archived = cancelled || booking.status === "Completed";
+        const deletable = cancelled;
         return `
            <article class="booking-row">
                ${image(trip.image, trip.title, 300)}
@@ -30191,7 +30191,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
                        <button class="btn btn-outline edit-booking" type="button" aria-expanded="false">Edit booking</button>
                        <button class="btn btn-outline cancel-booking" type="button" data-ref="${esc2(booking.ref)}">Cancel booking</button>
                    ` : ""}
-                   ${archived ? `<button class="booking-delete" type="button" data-ref="${esc2(booking.ref)}" aria-label="Delete booking" title="Delete booking">\u2672</button>` : ""}
+                   ${deletable ? `<button class="booking-delete" type="button" data-ref="${esc2(booking.ref)}" aria-label="Delete cancelled booking" title="Delete cancelled booking">\u2672</button>` : ""}
                </div>
                ${editable ? `
                    <div class="booking-edit-panel" hidden>
@@ -30349,8 +30349,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     }
     function bookingRows(list) {
       return list.map((b) => {
-        const t = trips.find((x) => x.id === b.tripId) || trips[0], d = destinations.find((x) => x.id === t.destinationId), cancelled = b.status === "Cancelled", archived = cancelled || b.status === "Completed";
-        return `<article class="booking-row">${image(t.image, t.title, 300)}<div><strong>${esc2(t.title)}</strong><div class="muted">${esc2(d.name)} \xB7 ${esc2(b.date || "Date not set")} \xB7 ${Number(b.guests) || 0} guests</div><span class="tag">${esc2(b.status)}</span></div><div class="row-action"><strong>$${Number(b.total || 0).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><br>${cancelled ? "" : `<button class="btn btn-outline cancel-booking" data-ref="${esc2(b.ref)}">Cancel booking</button>`}${archived ? `<button class="booking-delete" type="button" data-ref="${esc2(b.ref)}" aria-label="Delete booking" title="Delete booking">\u2672</button>` : ""}</div></article>`;
+        const t = trips.find((x) => x.id === b.tripId) || trips[0], d = destinations.find((x) => x.id === t.destinationId), cancelled = b.status === "Cancelled", completed = b.status === "Completed";
+        return `<article class="booking-row">${image(t.image, t.title, 300)}<div><strong>${esc2(t.title)}</strong><div class="muted">${esc2(d.name)} \xB7 ${esc2(b.date || "Date not set")} \xB7 ${Number(b.guests) || 0} guests</div><span class="tag">${esc2(b.status)}</span></div><div class="row-action"><strong>$${Number(b.total || 0).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><br>${cancelled || completed ? "" : `<button class="btn btn-outline cancel-booking" data-ref="${esc2(b.ref)}">Cancel booking</button>`}${cancelled ? `<button class="booking-delete" type="button" data-ref="${esc2(b.ref)}" aria-label="Delete cancelled booking" title="Delete cancelled booking">\u2672</button>` : ""}</div></article>`;
       }).join("");
     }
     function bookingsPage() {
