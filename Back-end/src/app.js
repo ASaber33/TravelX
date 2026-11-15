@@ -451,6 +451,9 @@ export function createApp(database, configuredOrigins = process.env.FRONTEND_ORI
   app.get("/", (request, response) => {
     response.sendFile(resolve(staticRoot, "index.html"));
   });
+  app.get("/index.html", (request, response) => {
+    response.sendFile(resolve(staticRoot, "index.html"));
+  });
   app.get("/Front-end", (request, response) => {
     response.redirect(302, "/");
   });

@@ -62,6 +62,19 @@ test("same-origin API requests are allowed through the production proxy", async 
   await server.close();
 });
 
+test("the homepage is served at both the root and /index.html", async () => {
+  const server = await startServer({ query: async () => ({ rows: [] }) });
+  const [rootResponse, indexResponse] = await Promise.all([
+    fetch(`${server.baseUrl}/`),
+    fetch(`${server.baseUrl}/index.html`)
+  ]);
+
+  assert.equal(rootResponse.status, 200);
+  assert.equal(indexResponse.status, 200);
+  assert.equal(await indexResponse.text(), await rootResponse.text());
+  await server.close();
+});
+
 test("auth config exposes only the public Neon Auth base URL", async () => {
   const previousBaseUrl = process.env.NEON_AUTH_BASE_URL;
   process.env.NEON_AUTH_BASE_URL = "https://auth.example.test/neondb/auth";
